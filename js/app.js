@@ -618,7 +618,7 @@ function appendRows() {
     const tdColor = document.createElement('td');
     tdColor.className = 'grp-start';
     const hex = '#' + d.color.toString(16).padStart(6, '0');
-    tdColor.dataset.copy = hex;
+    tdColor.dataset.copy = hex.slice(1);
     const sw = document.createElement('span');
     sw.className = 'swatch';
     sw.style.background = hex;
