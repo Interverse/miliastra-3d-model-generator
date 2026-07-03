@@ -128,9 +128,16 @@ all three components are always written (even 1.0).
   (configurable in the converter as it cannot be fully determined from the
   samples alone).
 - Scale: per-axis.
-  - **Triangle (20002125)**: 0.5 m legs (5 local units) along local +Y and
-    +Z at scale 1, right-angle corner at the local origin, thin along local
-    X. `scale_yz = leg_meters * 2`. X scale controls thickness.
+  - **Triangle v2 (20001925, current reference — White Triangle v2.gia)**:
+    right-angle corner at the local origin, legs of 1/7.7 m along local +Y
+    and 1/3.704 m along local **-Z** at scale 1, thin along local X (half
+    the thickness of 20002125). `scale_y = leg1_m * 7.7`,
+    `scale_z = leg2_m * 3.704`. The canonical 1×1 m sample is encoded as
+    rotation (0, 180, 0) with scale (1, 7.7, 3.704) — the Ry(180) maps the
+    -Z leg onto +Z.
+  - **Triangle v1 (20002125, legacy)**: 0.5 m legs (5 local units) along
+    local +Y and +Z at scale 1, right-angle corner at the local origin, thin
+    along local X. `scale_yz = leg_meters * 2`. X scale controls thickness.
   - **Square (10009001)**: 0.1 m edges (1 local unit) along local X and Z at
     scale 1, centered at the local origin, thin along local Y.
     `scale_xz = edge_meters * 10` (White Square.gia: 1×1 m at scale

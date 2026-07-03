@@ -79,7 +79,9 @@ function vec3(w, field, v, skipZero) {
 // ---------- constants ----------
 
 const OBJECT_TEMPLATE_ID = 10005018;   // MPActionGroup
-const TRIANGLE_MODEL_ID = 20002125;    // right-triangle decoration asset
+const TRIANGLE_MODEL_ID = 20001925;    // right-triangle model (v2 reference,
+                                       // legs 1/7.7 m +Y and 1/3.704 m -Z)
+const LEGACY_TRIANGLE_MODEL_ID = 20002125; // old v1 triangle (0.5 m legs +Y/+Z)
 const SQUARE_MODEL_ID = 10009001;      // square decoration asset (thin Y)
 const OBJ_GUID_BASE = 1077936129;      // 0x40400001
 const DEC_GUID_BASE = 1073741837;      // 0x4000000D
@@ -250,11 +252,12 @@ function splitIntoModels(name, decorations, maxPerModel = 999, position) {
 }
 
 return { buildGia, splitIntoModels, W, packedVarints,
-  OBJECT_TEMPLATE_ID, TRIANGLE_MODEL_ID, SQUARE_MODEL_ID,
-  OBJ_GUID_BASE, DEC_GUID_BASE,
+  OBJECT_TEMPLATE_ID, TRIANGLE_MODEL_ID, LEGACY_TRIANGLE_MODEL_ID,
+  SQUARE_MODEL_ID, OBJ_GUID_BASE, DEC_GUID_BASE,
   MAX_DECORATIONS_PER_MODEL: 999 };
 })();
 
 export const { buildGia, splitIntoModels, MAX_DECORATIONS_PER_MODEL,
-  TRIANGLE_MODEL_ID, SQUARE_MODEL_ID, DEC_GUID_BASE } = GIA;
+  TRIANGLE_MODEL_ID, LEGACY_TRIANGLE_MODEL_ID, SQUARE_MODEL_ID,
+  DEC_GUID_BASE } = GIA;
 export default GIA;

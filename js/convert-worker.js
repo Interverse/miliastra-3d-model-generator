@@ -82,9 +82,10 @@ function buildPreview(decorations, params) {
         pushTri([c[a], c[cq], c[dq]], r, g, b);
       }
     } else {
-      // canonical 0.5 m legs at scale 1, corner at origin, legs on local Y/Z
-      const a = d.scale.y * 0.5, bb = d.scale.z * 0.5;
-      const uy = col(1, a), wz = col(2, bb);
+      // v2 triangle model (20001925): corner at origin, legs of 1/7.7 m
+      // along local +Y and 1/3.704 m along local -Z at scale 1
+      const a = d.scale.y / 7.7, bb = d.scale.z / 3.704;
+      const uy = col(1, a), wz = col(2, -bb);
       pushTri([
         [px, py, pz],
         [px + uy[0], py + uy[1], pz + uy[2]],

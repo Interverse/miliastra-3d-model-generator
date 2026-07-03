@@ -125,8 +125,28 @@ function subdivideForColor(tri, mesh, params, depth, out, budget, stats) {
 
 // ---------- placements -> decoration records ----------
 
+// Triangle reference model (White Triangle v2.gia, model 20001925):
+// right-angle corner at the local origin, legs of 1/7.7 m along local +Y and
+// 1/3.704 m along local -Z at scale 1, thin on local X (half the thickness
+// of the old 20002125 model). scale_y = leg1_m * 7.7, scale_z = leg2_m * 3.704.
+export const TRI_SCALE_Y_PER_M = 7.7;
+export const TRI_SCALE_Z_PER_M = 3.704;
+
 export function placementToDecoration(pl, params) {
-  const euler = (params.eulerOrder === 'XYZ' ? matToEulerXYZ : matToEulerYXZ)(pl.rotation);
+  let rot = pl.rotation;
+  if (pl.kind !== 'square') {
+    // Internal placements put legs on local +Y/+Z. The v2 model's second leg
+    // points along local -Z, so right-multiply by Ry(180) = diag(-1,1,-1):
+    // columns become (-n, u, -w). (The canonical sample encodes exactly this
+    // as rotation (0,180,0).)
+    const R = pl.rotation;
+    rot = [
+      [-R[0][0], R[0][1], -R[0][2]],
+      [-R[1][0], R[1][1], -R[1][2]],
+      [-R[2][0], R[2][1], -R[2][2]],
+    ];
+  }
+  const euler = (params.eulerOrder === 'XYZ' ? matToEulerXYZ : matToEulerYXZ)(rot);
   const clean = (v) => {
     let d = v * DEG;
     d = Math.round(d * 10000) / 10000;
@@ -154,11 +174,11 @@ export function placementToDecoration(pl, params) {
       z: round6(pl.scale.z * 10),
     };
   } else {
-    // canonical triangle: 0.5 m legs at scale 1, thin on local X
+    // v2 triangle: legs 1/7.7 m (+Y) and 1/3.704 m (-Z) at scale 1
     base.scale = {
       x: params.thinScale,
-      y: round6(pl.scale.y * 2),
-      z: round6(pl.scale.z * 2),
+      y: round6(pl.scale.y * TRI_SCALE_Y_PER_M),
+      z: round6(pl.scale.z * TRI_SCALE_Z_PER_M),
     };
   }
   return base;

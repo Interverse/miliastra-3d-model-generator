@@ -48,9 +48,10 @@ sampling, subdivision decisions, preview overlay, and the generated `.gia`.
 
 ## How it works
 
-Each source triangle is reproduced by placing a canonical right-triangle
-decoration model (1×1 m legs at scale 2, thin X axis, right-angle corner at
-the origin) with a position, per-axis scale, and Euler rotation:
+Each source triangle is reproduced by placing the canonical right-triangle
+decoration model (v2 reference, model 20001925: legs of 1/7.7 m along local
++Y and 1/3.704 m along local -Z at scale 1, thin X axis, right-angle corner
+at the origin) with a position, per-axis scale, and Euler rotation:
 
 1. **Extract** mesh geometry (world-transformed, triangulated). Animations,
    skeletons, cameras, and lights are ignored.
