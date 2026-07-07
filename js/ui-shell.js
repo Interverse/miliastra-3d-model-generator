@@ -252,9 +252,13 @@ export function renderShell(root, { primitives = true } = {}) {
     </details>
 
     <footer>
-      Runs fully in your browser${primitives ? "" : ` ·
+      Runs fully in your browser${
+        primitives
+          ? ""
+          : ` ·
       <a href="../index.html">primitive data page</a> ·
-      <a href="../docs/gia-format.md" target="_blank">format notes</a>`}
+      <a href="../docs/gia-format.md" target="_blank">format notes</a>`
+      }
     </footer>
     </div><!-- /sidebar-scroll -->
 
@@ -431,24 +435,28 @@ export function renderShell(root, { primitives = true } = {}) {
     <div id="rb-actions">
       <button id="ed-save" disabled
         title="Store the edited reconstruction as its own entry in the scene">Save edits as new model</button>
-      ${primitives ? `
+      ${
+        primitives
+          ? `
       <button id="btn-view-prims" disabled>View primitives</button>
-      <div id="output-summary" class="hint2"></div>` : `
-      <label class="row">
+      <div id="output-summary" class="hint2"></div>`
+          : `
+      <label class="row" title="Toggling this checkbox will toggle the collision of the model">
         <span>Collision</span>
-        <input type="checkbox" id="p-collision" checked
-          title="Whether the exported models collide with players/objects">
+        <input type="checkbox" id="p-collision" checked>
       </label>
-      <label class="row">
+      <label class="row" title="Export dynamic unit prefabs instead of static ones: the first object becomes the Main object and its node graph spawns every other object at runtime (Create Prefab) and makes it follow the Main object (Follow Motion Device). Load optimization is disabled on all objects">
         <span>Auto-Assemble On Runtime</span>
-        <input type="checkbox" id="p-autoasm"
-          title="Export dynamic unit prefabs instead of static ones: the first object becomes the Main object and its node graph spawns every other object at runtime (Create Prefab) and makes it follow the Main object (Follow Motion Device). Load optimization is disabled on all objects">
+        <input type="checkbox" id="p-autoasm">
       </label>
-      <button id="btn-download" disabled>Download .gia</button>`}
+      <button id="btn-download" disabled>Download .gia</button>`
+      }
     </div>
   </aside>
 
-  ${primitives ? `
+  ${
+    primitives
+      ? `
   <div id="prim-modal" hidden>
     <div class="modal-box">
       <div class="modal-head">
@@ -484,7 +492,9 @@ export function renderShell(root, { primitives = true } = {}) {
         <button id="btn-more-rows" hidden>Show remaining rows</button>
       </div>
     </div>
-  </div>` : ""}
+  </div>`
+      : ""
+  }
 </div>`;
 
   // ----- resizable sidebars (persisted) -----
@@ -499,7 +509,8 @@ function setupResize(asideId, handleId, dir, min, max) {
   const key = "panel-width:" + asideId;
   try {
     const saved = parseInt(localStorage.getItem(key), 10);
-    if (saved >= min && saved <= max) aside.style.width = aside.style.minWidth = saved + "px";
+    if (saved >= min && saved <= max)
+      aside.style.width = aside.style.minWidth = saved + "px";
   } catch {}
   handle.addEventListener("pointerdown", (e) => {
     e.preventDefault();
@@ -507,13 +518,17 @@ function setupResize(asideId, handleId, dir, min, max) {
     const startX = e.clientX;
     const startW = aside.getBoundingClientRect().width;
     const move = (ev) => {
-      const w = Math.round(Math.min(max, Math.max(min, startW + dir * (ev.clientX - startX))));
+      const w = Math.round(
+        Math.min(max, Math.max(min, startW + dir * (ev.clientX - startX))),
+      );
       aside.style.width = aside.style.minWidth = w + "px";
     };
     const up = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
-      try { localStorage.setItem(key, parseInt(aside.style.width, 10)); } catch {}
+      try {
+        localStorage.setItem(key, parseInt(aside.style.width, 10));
+      } catch {}
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
