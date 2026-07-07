@@ -344,3 +344,7 @@ engine/             reusable conversion engine (no dependencies)
 tools/analyzer.html protobuf analyzer used to reverse-engineer .gia
 docs/gia-format.md  format specification
 ```
+
+## Disclaimer
+
+This is an unofficial, fan-made tool. HoYoverse is not affiliated with it and takes no responsibility for it or for anything created using it. I (the creator) also take no responsibility for any content, builds, or outcomes created with this tool - use it at your own discretion and please follow the game's Terms of Service. Stages containing content that harm the HoYoverse brand may be removed at any time.
