@@ -1,11 +1,12 @@
 // Shared UI shell for both pages (single source of truth for the markup).
 //
-//   renderShell(rootElement, { primitives: true })
+//   renderShell(rootElement, { primitives, primitivesHref, docsHref })
 //
-// primitives: true (the main landing page) — outputs only primitive data in
-//   a popup table; contains no .gia references.
-// primitives: false (the /gia page) — .gia download button, collision
-//   toggle, and format documentation links.
+// primitives: false (the MAIN page) — .gia download button, collision +
+//   auto-assemble toggles, and format documentation links.
+// primitives: true (the /gia page) — outputs only primitive data in a popup
+//   table; contains no .gia references.
+// primitivesHref / docsHref: footer link targets, relative to the page.
 //
 // Layout (professional-editor style):
 //   [left sidebar: import + conversion]  [viewport + toolbar + status bar]
@@ -13,7 +14,11 @@
 // Both sidebars are resizable (drag the inner edge) and every panel is
 // collapsible.
 
-export function renderShell(root, { primitives = true } = {}) {
+export function renderShell(root, {
+  primitives = true,
+  primitivesHref = 'gia/index.html',
+  docsHref = 'docs/gia-format.md',
+} = {}) {
   root.innerHTML = `
 <div id="app">
   <aside id="sidebar">
@@ -252,13 +257,7 @@ export function renderShell(root, { primitives = true } = {}) {
     </details>
 
     <footer>
-      Runs fully in your browser${
-        primitives
-          ? ""
-          : ` ·
-      <a href="../index.html">primitive data page</a> ·
-      <a href="../docs/gia-format.md" target="_blank">format notes</a>`
-      }
+      Runs fully in your browser
     </footer>
     </div><!-- /sidebar-scroll -->
 
@@ -331,7 +330,7 @@ export function renderShell(root, { primitives = true } = {}) {
       <span id="st-decs" title="Decorations in the active reconstruction"></span>
       <span id="st-sel" title="Selected primitives"></span>
       <span id="st-models" title="How the output splits into models of ≤999 decorations"></span>
-      <span id="st-size" title="Estimated .gia output size"></span>
+      <span id="st-size" title="Estimated output size"></span>
       <span id="st-warn" class="warn" title="Warnings"></span>
     </div>
   </main>

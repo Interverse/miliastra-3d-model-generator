@@ -20,14 +20,15 @@ no build step or `npm install` is required.
 Both pages share one implementation (`js/app.js` + `js/ui-shell.js`) — same
 pipeline, viewer, and parameters.
 
-- `index.html` — the main landing page. Outputs only the generated primitive
-  data: **View primitives** opens a popup table listing each primitive's
-  Position, Rotation, Zoom (scale), and Color, with a per-row checkbox to
-  mark primitives as manually processed (plus a Copy JSON button). Positions
-  and zoom are in units of 0.1 m; rotations in degrees.
-- `gia/index.html` — the `.gia` export page: **Download .gia**, the collision
-  toggle, **Auto-Assemble On Runtime**, and format documentation links live
-  here.
+- `index.html` — the MAIN page: the `.gia` export site with **Download
+  .gia**, the collision toggle, **Auto-Assemble On Runtime**, and format
+  documentation links.
+- `gia/index.html` — the primitive-data page. Outputs only the generated
+  primitive data: **View primitives** opens a popup table listing each
+  primitive's Position, Rotation, Zoom (scale), and Color, with a per-row
+  checkbox to mark primitives as manually processed (plus a Copy JSON
+  button). Positions and zoom are in units of 0.1 m; rotations in degrees.
+  Contains no `.gia` references.
 
 ### Auto-Assemble On Runtime
 
@@ -321,8 +322,8 @@ appear skewed in-game, switch **Euler order** to XYZ and regenerate.
 ## Layout
 
 ```
-index.html          primitive-data landing page (thin skeleton)
-gia/index.html      .gia export page (same shell + app, adds download)
+index.html          .gia export page — the main site (thin skeleton)
+gia/index.html      primitive-data page (same shell + app, no .gia refs)
 css/style.css
 js/ui-shell.js      shared UI markup for both pages (toolbar, panels, resize)
 js/app.js           shared app logic (initApp), loaders, outputs

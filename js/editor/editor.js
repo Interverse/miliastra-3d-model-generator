@@ -912,7 +912,7 @@ export function createEditor({ viewer, ctx }) {
     }
     rows.push(["Unique colors", s.uniqueColors.toLocaleString()]);
     rows.push(["Models (≤999 each)", String(s.models)]);
-    rows.push(["Est. .gia size", `<span id="stat-size-v">…</span>`]);
+    rows.push(["Est. output size", `<span id="stat-size-v">…</span>`]);
     grid.innerHTML = rows
       .map(([k, v]) => `<div class="k">${k}</div><div class="v">${v}</div>`)
       .join("");

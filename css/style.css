@@ -389,6 +389,9 @@ button:disabled {
 #btn-download:hover:not(:disabled) {
   background: #2ab377;
 }
+#btn-download:disabled {
+  color: rgba(255, 255, 255, 0.55);
+}
 button.secondary {
   background: #2a2e36;
   color: #9aa3b0;
