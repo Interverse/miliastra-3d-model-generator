@@ -39,11 +39,8 @@ export function mergeAdjacent(decorations, { colorTolerance = 0, eulerOrder = "Y
         eulerOrder,
       ),
       scale: { x: d.scale.x, y: 1, z: d.scale.z },
-      color: {
-        r: (d.color >> 16) & 255,
-        g: (d.color >> 8) & 255,
-        b: d.color & 255,
-      },
+      // engine colors are [r,g,b] arrays (colorToRgbInt/colorDistance)
+      color: [(d.color >> 16) & 255, (d.color >> 8) & 255, d.color & 255],
       _src: d,
     });
   }
@@ -65,9 +62,9 @@ export function mergeAdjacent(decorations, { colorTolerance = 0, eulerOrder = "Y
       };
       const rotationDeg = { x: norm(e.x), y: norm(e.y), z: norm(e.z) };
       const color =
-        ((Math.round(sq.color.r) & 255) << 16) |
-        ((Math.round(sq.color.g) & 255) << 8) |
-        (Math.round(sq.color.b) & 255);
+        ((Math.round(sq.color[0]) & 255) << 16) |
+        ((Math.round(sq.color[1]) & 255) << 8) |
+        (Math.round(sq.color[2]) & 255);
       // a merged rectangle may exceed the zoom-50 cap: grid-split it along
       // its local x/z axes (columns 0 and 2 of the rotation matrix)
       const u = [sq.rotation[0][0], sq.rotation[1][0], sq.rotation[2][0]];

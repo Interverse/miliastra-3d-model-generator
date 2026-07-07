@@ -173,6 +173,14 @@ warnings. With no primitives selected, Move/Rotate/Scale manipulate the
 source model itself (pivot/rotation/scale, synced with the Transform
 panel).
 
+**Navigation gizmo** — the axis ball in the top-right corner mirrors the
+camera orientation. Click an axis knob to snap to the standard views
+(±X = Right/Left, ±Y = Top/Bottom, ±Z = Front/Back, animated), or drag the
+ball to free-orbit. The button underneath toggles between **Perspective**
+and **Orthographic** projection; switching keeps the view visually stable,
+and every editor feature (picking, marquee, gizmos) works in both
+projections.
+
 **Selection** — click (Shift adds, Ctrl toggles), drag a box for marquee
 selection, All / None / Invert (**Ctrl+A**, **Alt+A** or **Esc**,
 **Ctrl+I**). Box selection is *visible-only* by default: a GPU ID buffer

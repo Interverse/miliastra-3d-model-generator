@@ -32,10 +32,18 @@ export class Viewer {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x14161a);
 
-    this.camera = new THREE.PerspectiveCamera(50, 1, 0.01, 5000);
-    this.camera.position.set(3, 2.5, 4);
+    // dual cameras: perspective (default) + orthographic, switched via
+    // setProjection(); this.camera always points at the active one
+    this.cameraPersp = new THREE.PerspectiveCamera(50, 1, 0.01, 5000);
+    this.cameraPersp.position.set(3, 2.5, 4);
+    this.cameraOrtho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 5000);
+    this.camera = this.cameraPersp;
+    this._orthoHalfH = 2;
+    this._aspect = 1;
+    this.onProjectionChange = null;
     this.controls = new OrbitControls(this.camera, canvas);
     this.controls.enableDamping = true;
+    this._ticks = []; // per-frame callbacks (nav gizmo etc.)
 
     const hemi = new THREE.HemisphereLight(0xffffff, 0x777777, 1.1);
     this.scene.add(hemi);
@@ -72,9 +80,12 @@ export class Viewer {
     this.renderer.setAnimationLoop(() => {
       this._stepFocus();
       this.controls.update();
+      for (const fn of this._ticks) fn();
       this.renderer.render(this.scene, this.camera);
     });
   }
+
+  addTick(fn) { this._ticks.push(fn); }
 
   _buildMeterRef() {
     const group = new THREE.Group();
@@ -117,8 +128,89 @@ export class Viewer {
     const parent = this.canvas.parentElement;
     const w = parent.clientWidth, h = parent.clientHeight;
     this.renderer.setSize(w, h, false);
-    this.camera.aspect = w / h;
-    this.camera.updateProjectionMatrix();
+    this._aspect = w / Math.max(1, h);
+    this.cameraPersp.aspect = this._aspect;
+    this.cameraPersp.updateProjectionMatrix();
+    this._applyOrthoFrustum();
+  }
+
+  _applyOrthoFrustum() {
+    const o = this.cameraOrtho;
+    const h = this._orthoHalfH;
+    o.left = -h * this._aspect;
+    o.right = h * this._aspect;
+    o.top = h;
+    o.bottom = -h;
+    o.updateProjectionMatrix();
+  }
+
+  // Switch between 'persp' and 'ortho' keeping the view visually stable.
+  setProjection(mode) {
+    const want = mode === 'ortho' ? this.cameraOrtho : this.cameraPersp;
+    if (this.camera === want) return;
+    const t = this.controls.target;
+    const halfFov = (this.cameraPersp.fov * Math.PI) / 360;
+    if (want === this.cameraOrtho) {
+      const d = this.camera.position.distanceTo(t);
+      want.position.copy(this.camera.position);
+      want.quaternion.copy(this.camera.quaternion);
+      want.near = Math.min(this.cameraPersp.near, d / 1000);
+      want.far = Math.max(this.cameraPersp.far, d * 100);
+      want.zoom = 1;
+      this._orthoHalfH = Math.tan(halfFov) * d;
+      this._applyOrthoFrustum();
+    } else {
+      // match the ortho view height at the equivalent perspective distance
+      const halfH = this._orthoHalfH / (this.cameraOrtho.zoom || 1);
+      const nd = Math.max(0.05, halfH / Math.tan(halfFov));
+      const dir = this.camera.position.clone().sub(t);
+      if (dir.lengthSq() < 1e-9) dir.set(1, 0.7, 1);
+      dir.normalize();
+      want.position.copy(t).addScaledVector(dir, nd);
+      want.quaternion.copy(this.camera.quaternion);
+      want.near = Math.min(this.cameraPersp.near, nd / 1000);
+      want.far = Math.max(this.cameraPersp.far, nd * 100);
+    }
+    want.updateProjectionMatrix();
+    this.camera = want;
+    this.controls.object = want;
+    this.controls.update();
+    this.onProjectionChange?.(want);
+  }
+
+  get projection() {
+    return this.camera.isOrthographicCamera ? 'ortho' : 'persp';
+  }
+
+  // Rotate the camera around the orbit target (used by the nav gizmo drag).
+  orbitBy(dTheta, dPhi) {
+    const t = this.controls.target;
+    const off = this.camera.position.clone().sub(t);
+    const sph = new THREE.Spherical().setFromVector3(off);
+    sph.theta -= dTheta;
+    sph.phi = Math.max(0.05, Math.min(Math.PI - 0.05, sph.phi - dPhi));
+    off.setFromSpherical(sph);
+    this.camera.position.copy(t).add(off);
+    this.camera.lookAt(t);
+    this.controls.update();
+  }
+
+  // Animate the camera to look along -dir at the current orbit target from
+  // the current distance (axis snap: Front/Back/Left/Right/Top/Bottom).
+  snapToView(dir) {
+    const t = this.controls.target.clone();
+    const d = Math.max(0.1, this.camera.position.distanceTo(t));
+    const v = new THREE.Vector3(dir.x ?? dir[0], dir.y ?? dir[1], dir.z ?? dir[2]);
+    if (Math.abs(v.y) > 0.999 * v.length()) v.z -= 0.02 * Math.sign(v.y) || 0.02;
+    v.normalize();
+    this._focusTween = {
+      t0: performance.now(),
+      dur: 300,
+      fromPos: this.camera.position.clone(),
+      toPos: t.clone().addScaledVector(v, d),
+      fromTgt: this.controls.target.clone(),
+      toTgt: t,
+    };
   }
 
   setModel(object3d, keepView = false) {
@@ -137,6 +229,11 @@ export class Viewer {
     this.camera.position.copy(center).add(new THREE.Vector3(radius * 0.9, radius * 0.7, radius * 1.2));
     this.camera.near = radius / 1000;
     this.camera.far = radius * 100;
+    if (this.camera.isOrthographicCamera) {
+      this._orthoHalfH = radius * 1.1;
+      this.camera.zoom = 1;
+      this._applyOrthoFrustum();
+    }
     this.camera.updateProjectionMatrix();
     const gridSize = Math.pow(10, Math.ceil(Math.log10(radius * 2)));
     this.grid.scale.setScalar(gridSize / 10);
@@ -152,7 +249,7 @@ export class Viewer {
     const dir = this.camera.position.clone().sub(this.controls.target);
     if (dir.lengthSq() < 1e-9) dir.set(1, 0.7, 1);
     dir.normalize();
-    const dist = (radius / Math.tan((this.camera.fov * Math.PI) / 360)) * 1.35;
+    const dist = (radius / Math.tan((this.cameraPersp.fov * Math.PI) / 360)) * 1.35;
     this._focusTween = {
       t0: performance.now(),
       dur: 260,
@@ -163,6 +260,11 @@ export class Viewer {
     };
     this.camera.near = Math.max(dist / 1000, 0.0005);
     this.camera.far = Math.max(this.camera.far, dist * 100);
+    if (this.camera.isOrthographicCamera) {
+      this._orthoHalfH = radius * 1.2;
+      this.camera.zoom = 1;
+      this._applyOrthoFrustum();
+    }
     this.camera.updateProjectionMatrix();
   }
 

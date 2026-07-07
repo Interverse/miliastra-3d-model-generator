@@ -321,6 +321,12 @@ export function renderShell(root, { primitives = true } = {}) {
     </div>
     </div><!-- /vp-topbars -->
 
+    <div id="nav-widget">
+      <canvas id="nav-gizmo" width="96" height="96"
+        title="Camera orientation — click an axis to snap the view, drag to orbit"></canvas>
+      <button id="nav-proj" title="Toggle Perspective / Orthographic projection">Persp</button>
+    </div>
+
     <div id="vp-status">
       <span id="st-decs" title="Decorations in the active reconstruction"></span>
       <span id="st-sel" title="Selected primitives"></span>

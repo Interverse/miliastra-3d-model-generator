@@ -1024,6 +1024,11 @@ export function createEditor({ viewer, ctx }) {
     onModelTransformChanged() {
       if (!gizmoDragging && gizmoTarget === "model") syncGizmo();
     },
+    // the viewer switched between perspective and orthographic cameras
+    onCameraChanged(cam) {
+      gizmo.camera = cam;
+      if (!gizmoDragging) syncGizmo();
+    },
     setTool,
     focusSelection,
     get selectionSize() {

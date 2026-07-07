@@ -8,6 +8,7 @@ import { STLLoader } from "three/addons/loaders/STLLoader.js";
 import { TGALoader } from "three/addons/loaders/TGALoader.js";
 import { Viewer } from "./viewer.js";
 import { createEditor } from "./editor/editor.js";
+import { createNavGizmo } from "./nav-gizmo.js";
 import { KIND_LABELS } from "./editor/stats.js";
 import { extractMeshes } from "./extract.js";
 import { setupTexturePanel } from "./texture-tools.js";
@@ -1274,6 +1275,10 @@ export function initApp({ mode = "gia" } = {}) {
       el.append(kEl, vEl);
     }
   }
+
+  // camera navigation gizmo + projection switching
+  createNavGizmo(viewer);
+  viewer.onProjectionChange = (cam) => editor.onCameraChanged(cam);
 
   editor.refresh(); // initial UI state (empty scene)
 } // end initApp
