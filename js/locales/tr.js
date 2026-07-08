@@ -355,4 +355,11 @@ export default {
   "err.convert": "Dönüştürme başarısız: {msg}",
   "err.image": "Görsel okunamadı: {msg}",
   "err.clipboard": "Pano kullanılamıyor: {msg}",
+
+  "paste.title": "Panodan yapıştır",
+  "paste.choose": "İçe aktarılacak dosyaları seçin:",
+  "paste.import": "Seçilenleri içe aktar",
+  "paste.cancel": "İptal",
+  "t.pasteimported": "Panodan {n} dosya içe aktarıldı",
+  "t.pastenone": "Panoda desteklenen dosya yok",
 };

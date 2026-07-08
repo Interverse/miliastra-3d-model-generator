@@ -355,4 +355,11 @@ export default {
   "err.convert": "변환 실패: {msg}",
   "err.image": "이미지를 읽을 수 없습니다: {msg}",
   "err.clipboard": "클립보드를 사용할 수 없습니다: {msg}",
+
+  "paste.title": "클립보드에서 붙여넣기",
+  "paste.choose": "가져올 파일 선택:",
+  "paste.import": "선택 항목 가져오기",
+  "paste.cancel": "취소",
+  "t.pasteimported": "클립보드에서 파일 {n}개를 가져왔습니다",
+  "t.pastenone": "클립보드에 지원되는 파일이 없습니다",
 };

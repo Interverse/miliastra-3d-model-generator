@@ -355,4 +355,11 @@ export default {
   "err.convert": "La conversión falló: {msg}",
   "err.image": "No se pudo leer la imagen: {msg}",
   "err.clipboard": "Portapapeles no disponible: {msg}",
+
+  "paste.title": "Pegar desde el portapapeles",
+  "paste.choose": "Elige qué archivos importar:",
+  "paste.import": "Importar selección",
+  "paste.cancel": "Cancelar",
+  "t.pasteimported": "{n} archivo(s) importado(s) del portapapeles",
+  "t.pastenone": "No hay archivos compatibles en el portapapeles",
 };

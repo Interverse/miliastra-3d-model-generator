@@ -355,4 +355,11 @@ export default {
   "err.convert": "A conversão falhou: {msg}",
   "err.image": "Não foi possível ler a imagem: {msg}",
   "err.clipboard": "Área de transferência indisponível: {msg}",
+
+  "paste.title": "Colar da área de transferência",
+  "paste.choose": "Escolha quais arquivos importar:",
+  "paste.import": "Importar selecionados",
+  "paste.cancel": "Cancelar",
+  "t.pasteimported": "{n} arquivo(s) importado(s) da área de transferência",
+  "t.pastenone": "Nenhum arquivo compatível na área de transferência",
 };

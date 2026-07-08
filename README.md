@@ -53,6 +53,12 @@ Many formats reference external texture files. Upload them together with the
 model **or separately at any time** (drag-drop or file picker) — the app keeps
 a file library and reloads the model whenever new files arrive:
 
+- Files can also be pasted from the clipboard (Ctrl+V) anywhere on the page
+  (except while typing in a text field): models, textures, .mtl, and raw
+  copied images (e.g. screenshots, which enter the 3D-sprite path when no
+  model is loaded) are detected and routed to the right workflow
+  automatically. When several valid files are on the clipboard, a chooser
+  lets you pick which to import.
 - References are resolved by file name (case-insensitive, ignoring folders),
   so absolute paths baked into FBX/OBJ files still match.
 - Supported: `.png` `.jpg` `.jpeg` `.webp` `.bmp` `.gif` `.tga`.

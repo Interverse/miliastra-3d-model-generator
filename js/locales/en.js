@@ -356,4 +356,11 @@ export default {
   "err.convert": "Conversion failed: {msg}",
   "err.image": "Could not read image: {msg}",
   "err.clipboard": "Clipboard unavailable: {msg}",
+
+  "paste.title": "Paste from clipboard",
+  "paste.choose": "Choose which files to import:",
+  "paste.import": "Import selected",
+  "paste.cancel": "Cancel",
+  "t.pasteimported": "Imported {n} file(s) from the clipboard",
+  "t.pastenone": "No supported files in the clipboard",
 };

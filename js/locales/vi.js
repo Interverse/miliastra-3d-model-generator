@@ -355,4 +355,11 @@ export default {
   "err.convert": "Chuyển đổi thất bại: {msg}",
   "err.image": "Không đọc được ảnh: {msg}",
   "err.clipboard": "Không dùng được bộ nhớ tạm: {msg}",
+
+  "paste.title": "Dán từ bộ nhớ tạm",
+  "paste.choose": "Chọn tệp cần nhập:",
+  "paste.import": "Nhập mục đã chọn",
+  "paste.cancel": "Hủy",
+  "t.pasteimported": "Đã nhập {n} tệp từ bộ nhớ tạm",
+  "t.pastenone": "Không có tệp được hỗ trợ trong bộ nhớ tạm",
 };

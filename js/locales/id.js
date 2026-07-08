@@ -355,4 +355,11 @@ export default {
   "err.convert": "Konversi gagal: {msg}",
   "err.image": "Tidak dapat membaca gambar: {msg}",
   "err.clipboard": "Papan klip tidak tersedia: {msg}",
+
+  "paste.title": "Tempel dari papan klip",
+  "paste.choose": "Pilih berkas yang akan diimpor:",
+  "paste.import": "Impor yang dipilih",
+  "paste.cancel": "Batal",
+  "t.pasteimported": "{n} berkas diimpor dari papan klip",
+  "t.pastenone": "Tidak ada berkas yang didukung di papan klip",
 };

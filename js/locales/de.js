@@ -355,4 +355,11 @@ export default {
   "err.convert": "Konvertierung fehlgeschlagen: {msg}",
   "err.image": "Bild konnte nicht gelesen werden: {msg}",
   "err.clipboard": "Zwischenablage nicht verfügbar: {msg}",
+
+  "paste.title": "Aus Zwischenablage einfügen",
+  "paste.choose": "Wähle die zu importierenden Dateien:",
+  "paste.import": "Auswahl importieren",
+  "paste.cancel": "Abbrechen",
+  "t.pasteimported": "{n} Datei(en) aus der Zwischenablage importiert",
+  "t.pastenone": "Keine unterstützten Dateien in der Zwischenablage",
 };

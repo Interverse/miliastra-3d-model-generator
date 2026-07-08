@@ -355,4 +355,11 @@ export default {
   "err.convert": "Conversione non riuscita: {msg}",
   "err.image": "Impossibile leggere l'immagine: {msg}",
   "err.clipboard": "Appunti non disponibili: {msg}",
+
+  "paste.title": "Incolla dagli appunti",
+  "paste.choose": "Scegli quali file importare:",
+  "paste.import": "Importa selezionati",
+  "paste.cancel": "Annulla",
+  "t.pasteimported": "{n} file importati dagli appunti",
+  "t.pastenone": "Nessun file supportato negli appunti",
 };

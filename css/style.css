@@ -694,6 +694,57 @@ footer {
 footer a {
   color: #7ec8ff;
 }
+/* clipboard-import chooser (multiple files pasted) */
+#paste-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+}
+#paste-modal .paste-box {
+  background: #1b1e24;
+  border: 1px solid #3a4150;
+  border-radius: 8px;
+  padding: 16px 18px;
+  min-width: 320px;
+  max-width: 460px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+#paste-modal h2 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+#paste-modal .paste-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid #262a32;
+  cursor: pointer;
+  font-size: 13px;
+}
+#paste-modal .paste-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#paste-modal .paste-kind {
+  color: #6b7482;
+  font-size: 11px;
+  white-space: nowrap;
+}
+#paste-modal .btn-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
 /* language selector pinned at the top of the sidebar, above all panels */
 #lang-row {
   text-align: left;

@@ -355,4 +355,11 @@ export default {
   "err.convert": "変換に失敗しました：{msg}",
   "err.image": "画像を読み取れませんでした：{msg}",
   "err.clipboard": "クリップボードを使用できません：{msg}",
+
+  "paste.title": "クリップボードから貼り付け",
+  "paste.choose": "取り込むファイルを選択：",
+  "paste.import": "選択を取り込む",
+  "paste.cancel": "キャンセル",
+  "t.pasteimported": "クリップボードから {n} 件のファイルを取り込みました",
+  "t.pastenone": "クリップボードに対応ファイルがありません",
 };

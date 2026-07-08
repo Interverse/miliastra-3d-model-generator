@@ -9,7 +9,7 @@ import { TGALoader } from "three/addons/loaders/TGALoader.js";
 import { Viewer } from "./viewer.js";
 import { createEditor } from "./editor/editor.js";
 import { createNavGizmo } from "./nav-gizmo.js";
-import { KIND_LABELS } from "./editor/stats.js";
+import { KIND_LABELS, formatBytes } from "./editor/stats.js";
 import { extractMeshes } from "./extract.js";
 import { setupTexturePanel } from "./texture-tools.js";
 import { buildPreview } from "./preview-mesh.js";
@@ -127,6 +127,113 @@ export function initApp({ mode = "gia" } = {}) {
   // after the model. Every upload re-resolves the current model against it.
   const MODEL_RE = /\.(fbx|obj|glb|gltf|stl)$/i;
   const IMAGE_RE = /\.(png|jpe?g|webp|bmp|gif|tga)$/i;
+  const PASTE_RE = /\.(fbx|obj|glb|gltf|stl|mtl|png|jpe?g|webp|bmp|gif|tga)$/i;
+
+  // ---------- clipboard import (Ctrl+V anywhere on the page) ----------
+  // Pasted files route through loadFiles(), which already dispatches to the
+  // right workflow: models load, textures stage/apply, and a lone image
+  // enables the 3D-sprite path.
+  const isTextEntry = (el) => {
+    if (!el) return false;
+    if (el.isContentEditable) return true;
+    if (el.tagName === "TEXTAREA") return true;
+    if (el.tagName === "INPUT")
+      return !["checkbox", "radio", "range", "color", "file", "button"].includes(el.type);
+    return false;
+  };
+
+  window.addEventListener("paste", (ev) => {
+    if (isTextEntry(ev.target) || isTextEntry(document.activeElement)) return;
+    // the editor's internal primitive paste (copied primitives) takes
+    // priority — its keydown handler flags the event just before this fires
+    if (performance.now() - (window.__giaInternalPaste ?? -1e9) < 400) return;
+    const dt = ev.clipboardData;
+    if (!dt || !dt.files.length) return; // plain text etc. — ignore
+    // raw image data (a copied screenshot) arrives with a generic name; give
+    // each a unique one so repeated pastes don't overwrite library entries
+    const files = [...dt.files].map((f, i) => {
+      if (!f.name || /^image\.(png|jpe?g|webp|bmp|gif)$/i.test(f.name)) {
+        const ext = (f.type.split("/")[1] || "png").replace("jpeg", "jpg");
+        return new File([f], `clipboard-${Date.now()}-${i + 1}.${ext}`, { type: f.type });
+      }
+      return f;
+    });
+    const valid = files.filter((f) => PASTE_RE.test(f.name));
+    if (!valid.length) {
+      showToast(t("t.pastenone"));
+      return;
+    }
+    ev.preventDefault();
+    if (valid.length === 1) {
+      loadFiles(valid);
+      showToast(t("t.pasteimported", { n: 1 }));
+    } else {
+      showPasteChooser(valid);
+    }
+  });
+
+  // Multiple valid files on the clipboard: let the user pick which to import.
+  function showPasteChooser(files) {
+    document.getElementById("paste-modal")?.remove();
+    const overlay = document.createElement("div");
+    overlay.id = "paste-modal";
+    const box = document.createElement("div");
+    box.className = "paste-box";
+    const h = document.createElement("h2");
+    h.textContent = t("paste.title");
+    const p = document.createElement("div");
+    p.className = "hint2";
+    p.textContent = t("paste.choose");
+    box.append(h, p);
+    const rows = files.map((f) => {
+      const row = document.createElement("label");
+      row.className = "paste-row";
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = true;
+      const name = document.createElement("span");
+      name.className = "paste-name";
+      name.textContent = f.name;
+      const kind = document.createElement("span");
+      kind.className = "paste-kind";
+      kind.textContent =
+        f.name.split(".").pop().toUpperCase() + (f.size ? " · " + formatBytes(f.size) : "");
+      row.append(cb, name, kind);
+      box.appendChild(row);
+      return { cb, f };
+    });
+    const btns = document.createElement("div");
+    btns.className = "btn-row";
+    const ok = document.createElement("button");
+    ok.textContent = t("paste.import");
+    const cancel = document.createElement("button");
+    cancel.className = "secondary";
+    cancel.textContent = t("paste.cancel");
+    btns.append(ok, cancel);
+    box.appendChild(btns);
+    overlay.appendChild(box);
+    const close = () => {
+      overlay.remove();
+      window.removeEventListener("keydown", onKey);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") close();
+    };
+    window.addEventListener("keydown", onKey);
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) close();
+    });
+    cancel.addEventListener("click", close);
+    ok.addEventListener("click", () => {
+      const chosen = rows.filter((r) => r.cb.checked).map((r) => r.f);
+      close();
+      if (chosen.length) {
+        loadFiles(chosen);
+        showToast(t("t.pasteimported", { n: num(chosen.length) }));
+      }
+    });
+    document.body.appendChild(overlay);
+  }
   const fileLibrary = new Map(); // basename(lower) -> File
   let currentModelName = null; // basename(lower) of the active model
   let urlMap = new Map(); // basename(lower) -> blob URL (rebuilt per load)

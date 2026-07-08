@@ -355,4 +355,11 @@ export default {
   "err.convert": "Échec de la conversion : {msg}",
   "err.image": "Impossible de lire l'image : {msg}",
   "err.clipboard": "Presse-papiers indisponible : {msg}",
+
+  "paste.title": "Coller depuis le presse-papiers",
+  "paste.choose": "Choisissez les fichiers à importer :",
+  "paste.import": "Importer la sélection",
+  "paste.cancel": "Annuler",
+  "t.pasteimported": "{n} fichier(s) importé(s) du presse-papiers",
+  "t.pastenone": "Aucun fichier pris en charge dans le presse-papiers",
 };

@@ -848,6 +848,9 @@ export function createEditor({ viewer, ctx }) {
         copySelection();
       } else if (k === "v") {
         ev.preventDefault();
+        // flag the internal primitive paste so the app's clipboard-file
+        // import (paste event, fires right after keydown) stands down
+        if (clipboard.length) window.__giaInternalPaste = performance.now();
         duplicateSelected(true);
       } else if (k === "d") {
         ev.preventDefault();

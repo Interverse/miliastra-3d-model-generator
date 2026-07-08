@@ -355,4 +355,11 @@ export default {
   "err.convert": "轉換失敗：{msg}",
   "err.image": "無法讀取圖片：{msg}",
   "err.clipboard": "剪貼簿不可用：{msg}",
+
+  "paste.title": "從剪貼簿貼上",
+  "paste.choose": "選擇要匯入的檔案：",
+  "paste.import": "匯入所選",
+  "paste.cancel": "取消",
+  "t.pasteimported": "已從剪貼簿匯入 {n} 個檔案",
+  "t.pastenone": "剪貼簿中沒有支援的檔案",
 };

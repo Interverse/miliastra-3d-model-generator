@@ -355,4 +355,11 @@ export default {
   "err.convert": "การแปลงล้มเหลว: {msg}",
   "err.image": "อ่านรูปภาพไม่ได้: {msg}",
   "err.clipboard": "ใช้คลิปบอร์ดไม่ได้: {msg}",
+
+  "paste.title": "วางจากคลิปบอร์ด",
+  "paste.choose": "เลือกไฟล์ที่จะนำเข้า:",
+  "paste.import": "นำเข้าที่เลือก",
+  "paste.cancel": "ยกเลิก",
+  "t.pasteimported": "นำเข้า {n} ไฟล์จากคลิปบอร์ดแล้ว",
+  "t.pastenone": "ไม่มีไฟล์ที่รองรับในคลิปบอร์ด",
 };
