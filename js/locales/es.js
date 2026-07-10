@@ -122,6 +122,8 @@ export default {
   "tx.invert": "Invertir",
   "tip.tx.invert": "Invierte todos los colores (negativo)",
   "tx.reset": "Restablecer textura",
+  "tx.sync": "Sincronizar con todas las texturas",
+  "tip.tx.sync": "Copia los ajustes de esta textura a todas las demás texturas del modelo",
   "tx.hint": "Las ediciones se aplican a la conversión (los colores se muestrean de la textura editada): pulsa Generar para ver el resultado. El modelo del visor conserva su textura original.",
   "tx.item": "Textura {n}",
 

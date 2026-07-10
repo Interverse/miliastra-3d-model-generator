@@ -122,6 +122,8 @@ export default {
   "tx.invert": "Tersle",
   "tip.tx.invert": "Tüm renkleri tersler (negatif)",
   "tx.reset": "Dokuyu sıfırla",
+  "tx.sync": "Tüm dokulara eşitle",
+  "tip.tx.sync": "Bu dokunun ayarlarını modeldeki diğer tüm dokulara kopyalar",
   "tx.hint": "Düzenlemeler dönüştürmeye uygulanır (renkler düzenlenmiş dokudan örneklenir) — sonucu görmek için Üret'e basın. Görüntü alanındaki model özgün dokusunu korur.",
   "tx.item": "Doku {n}",
 

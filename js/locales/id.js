@@ -122,6 +122,8 @@ export default {
   "tx.invert": "Balikkan",
   "tip.tx.invert": "Membalik semua warna (negatif)",
   "tx.reset": "Reset tekstur",
+  "tx.sync": "Sinkronkan ke semua tekstur",
+  "tip.tx.sync": "Menyalin pengaturan tekstur ini ke semua tekstur lain pada model",
   "tx.hint": "Suntingan berlaku pada konversi (warna disampling dari tekstur yang diedit) — klik Hasilkan untuk melihat hasilnya. Model di viewport tetap memakai tekstur asli.",
   "tx.item": "Tekstur {n}",
 

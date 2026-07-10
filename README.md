@@ -178,10 +178,16 @@ the grid) helps judge scale.
 A **Texture** panel appears for textured models (a dropdown selects between
 multiple textures). All edits feed the conversion directly:
 
-- **Color reduction** — true color quantization: similar colors merge into
-  fewer representatives (agglomerative, weighted by frequency); higher
-  strength collapses the palette dramatically while preserving appearance.
+- **Color reduction** — K-means color quantization (weighted, in perceptual
+  CIELAB space, k-means++ seeded and deterministic): the slider maps to a
+  cluster count K (~48 colors when mild, 2 at maximum) and every pixel
+  snaps to its cluster's weighted-mean color. Fewer unique colors mean far
+  fewer generated decorations while preserving overall appearance.
 - **Recoloring** — hue shift, saturation, brightness, contrast, invert.
+- **Per-texture settings** — every texture keeps its own configuration;
+  selecting another texture restores that texture's settings. With multiple
+  textures, **Sync to All Textures** copies the current texture's settings
+  to every other one.
 - Everything is non-destructive until Reset; adjustments recompute from the
   original pixels so sliders never accumulate loss.
 

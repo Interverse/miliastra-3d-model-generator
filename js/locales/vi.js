@@ -122,6 +122,8 @@ export default {
   "tx.invert": "Đảo màu",
   "tip.tx.invert": "Đảo ngược mọi màu (âm bản)",
   "tx.reset": "Đặt lại kết cấu",
+  "tx.sync": "Đồng bộ sang mọi kết cấu",
+  "tip.tx.sync": "Sao chép thiết lập của kết cấu này sang tất cả kết cấu khác của mô hình",
   "tx.hint": "Chỉnh sửa áp dụng cho việc chuyển đổi (màu lấy mẫu từ kết cấu đã sửa) — bấm Tạo để xem kết quả. Mô hình trong khung nhìn giữ kết cấu gốc.",
   "tx.item": "Kết cấu {n}",
 

@@ -122,6 +122,8 @@ export default {
   "tx.invert": "Inverter",
   "tip.tx.invert": "Inverte todas as cores (negativo)",
   "tx.reset": "Redefinir textura",
+  "tx.sync": "Sincronizar com todas as texturas",
+  "tip.tx.sync": "Copia os ajustes desta textura para todas as outras texturas do modelo",
   "tx.hint": "As edições valem para a conversão (as cores são amostradas da textura editada) — clique em Gerar para ver o resultado. O modelo do viewport mantém a textura original.",
   "tx.item": "Textura {n}",
 

@@ -245,6 +245,7 @@ export function renderShell(root, {
         <input type="checkbox" id="tx-invert">
       </label>
       <button id="tx-reset" class="secondary" data-i18n="tx.reset"></button>
+      <button id="tx-sync" class="secondary" hidden data-i18n="tx.sync" data-i18n-title="tip.tx.sync"></button>
       <div class="hint2" data-i18n="tx.hint"></div>
     </details>
 
