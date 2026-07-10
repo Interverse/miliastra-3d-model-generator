@@ -424,6 +424,7 @@ export function renderShell(root, {
       </label>
       <button id="opt-merge" class="secondary" data-i18n="opt.merge" data-i18n-title="tip.opt.merge"></button>
       <button id="opt-hidden" class="secondary" data-i18n="opt.hidden" data-i18n-title="tip.opt.hidden"></button>
+      <button id="opt-zfight" class="secondary" data-i18n="opt.zfight" data-i18n-title="tip.opt.zfight"></button>
       <div class="row" data-i18n-title="tip.opt.target">
         <span data-i18n="opt.target"></span>
         <input type="number" id="opt-target" value="999" min="1" step="1">

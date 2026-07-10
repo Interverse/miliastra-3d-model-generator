@@ -254,6 +254,12 @@ the zoom-50 limit, or the per-model split threshold is exceeded.
   splitting any merge that would exceed zoom 50;
 - *Remove hidden primitives*: renders the reconstruction from 26 viewpoints
   into a GPU ID buffer and deletes primitives visible from none of them;
+- *Fix Z-Fighting*: detects coplanar (±0.8 mm) overlapping thin primitives
+  and stops the flickering — redundant same-color duplicates (e.g. from
+  double-sided sheets) are removed outright, remaining overlaps get a
+  minimal 1.2 mm outward offset per layer, iterated to convergence.
+  Applies to the selection, or the whole model when nothing is selected;
+  volumetric primitives never fight and are skipped;
 - *Reduce to target*: escalating-tolerance merging first, then drops the
   smallest primitives until the target count is met.
 

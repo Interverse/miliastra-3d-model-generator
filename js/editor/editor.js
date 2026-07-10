@@ -32,7 +32,7 @@ import {
   decRadius,
 } from "./dec-transform.js";
 import { computeEditorStats, formatBytes } from "./stats.js";
-import { mergeAdjacent, reduceToTarget } from "./optimize.js";
+import { mergeAdjacent, reduceToTarget, fixZFighting } from "./optimize.js";
 import { buildPreview } from "../preview-mesh.js";
 import { t, num } from "../i18n.js";
 
@@ -994,6 +994,23 @@ export function createEditor({ viewer, ctx }) {
     ctx.rebuild(false);
     ctx.toast(t("t.removedhidden", { n: num(total - visible.size) }));
   });
+  $("opt-zfight").addEventListener("click", () => {
+    const e = recon();
+    if (!e) return;
+    // selection scopes the fix; nothing selected = whole model
+    const sel = selection.size ? [...selection] : null;
+    pushHistory("fix z-fighting");
+    const res = fixZFighting(e.msg.decorations, sel, { eulerOrder: eulerOrder(e) });
+    if (!res.conflicts) {
+      ctx.toast(t("t.zfixnone"));
+      return;
+    }
+    e.msg.decorations = res.decorations;
+    selection.clear();
+    ctx.rebuild(false);
+    ctx.toast(t("t.zfixed", { d: num(res.removed), o: num(res.layered) }));
+  });
+
   $("opt-reduce").addEventListener("click", () => {
     const e = recon();
     if (!e) return;

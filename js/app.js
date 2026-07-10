@@ -30,6 +30,9 @@ import { initTutorial } from "./tutorial.js";
 export function initApp({ mode = "gia" } = {}) {
   const $ = (id) => document.getElementById(id);
   const viewer = new Viewer($("canvas"));
+  // decimation-preview materials carry their own CanvasTexture copies —
+  // registered here so texture edits repaint them too (see updateDecimPreview)
+  let decimTexMats = []; // [{ texture, material }]
   // texture edits sync straight onto the viewport materials
   const texPanel = setupTexturePanel($, (textureObj) => {
     for (const t of extracted?.textures ?? []) {
@@ -77,6 +80,19 @@ export function initApp({ mode = "gia" } = {}) {
         map.image = cv;
         map.needsUpdate = true;
       }
+    }
+    // the decimation preview (when active) uses its own CanvasTexture per
+    // mesh — repaint those in place so it always shows the same colors as
+    // the final generated output
+    for (const t of decimTexMats) {
+      if (t.texture !== textureObj || !t.material.map?.image) continue;
+      t.material.map.image
+        .getContext("2d")
+        .putImageData(
+          new ImageData(new Uint8ClampedArray(textureObj.data), textureObj.width, textureObj.height),
+          0, 0,
+        );
+      t.material.map.needsUpdate = true;
     }
   });
   const worker = new Worker(new URL("./convert-worker.js", import.meta.url), {
@@ -618,6 +634,7 @@ export function initApp({ mode = "gia" } = {}) {
     displayedObject = null;
     extracted = null;
     modelInfo = null;
+    decimTexMats = [];
     viewer.setModel(null);
     editor.refresh();
     clearReconstructions();
@@ -650,6 +667,7 @@ export function initApp({ mode = "gia" } = {}) {
     decimTimer = setTimeout(updateDecimPreview, 200);
   }
   function updateDecimPreview() {
+    decimTexMats = []; // rebuilt below when the decimated preview is textured
     const strength = (parseInt($("p-decimate").value, 10) || 0) / 100;
     const want =
       $("p-prevdec").checked && strength > 0 && extracted && currentObject;
@@ -757,6 +775,8 @@ export function initApp({ mode = "gia" } = {}) {
         tex.flipY = m.texture.flipY !== false;
         mat.map = tex;
         mat.color.set(0xffffff);
+        // register for live texture-edit updates (see onTextureChange)
+        decimTexMats.push({ texture: m.texture, material: mat });
       }
       group.add(new THREE.Mesh(geo, mat));
     }
