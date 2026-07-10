@@ -48,6 +48,12 @@
   .thumb-pair { display: flex; gap: 4px; }
   canvas.thumb { width: 160px; height: 160px; background: #000; border-radius: 4px; image-rendering: pixelated; }
   .badge { display: inline-block; padding: 1px 7px; border-radius: 10px; background: #2a2e36; font-size: 11px; color: #8b93a3; margin-left: 6px; }
+  #determinism-banner {
+    margin: 0 0 14px; padding: 8px 14px; border-radius: 6px; font-size: 13px;
+    font-weight: 600;
+  }
+  #determinism-banner.ok { background: rgba(54, 212, 126, 0.12); color: #36d47e; border: 1px solid rgba(54, 212, 126, 0.4); }
+  #determinism-banner.mismatch { background: rgba(220, 80, 80, 0.12); color: #ff6b6b; border: 1px solid rgba(220, 80, 80, 0.4); }
   #jsonbar { margin-top: 14px; display: flex; gap: 10px; align-items: center; }
   a.dl { color: #36d47e; }
   code { background: #20242c; padding: 1px 5px; border-radius: 3px; }
@@ -56,20 +62,47 @@
 <body>
   <h1>Similarity test harness</h1>
   <p class="sub">Quantitative source-vs-reconstruction comparison — see
-    <code>docs/decoration-reduction-plan.md</code> § Phase 1.5. Extraction goes
-    through <code>js/extract.js</code>, conversion through
-    <code>engine/convert/converter.js</code> (mode: hyper, defaults), and the
-    reconstruction preview through <code>js/preview-mesh.js</code> — the same
-    path the app itself uses.</p>
+    <code>docs/decoration-reduction-plan.md</code> § 8 (Phase 3 — metric
+    hardening; built on the § Phase 2 essence suite and § Phase 1.5 harness).
+    Extraction goes through <code>js/extract.js</code>, conversion through
+    <code>engine/convert/converter.js</code> (mode: hyper — <code>hyperCurved</code>
+    is left unset by default so the converter's own shipped default applies;
+    <code>?hyperCurved=0</code> is the explicit fitter-OFF A/B control, see
+    the fitter badge), and the reconstruction preview through
+    <code>js/preview-mesh.js</code> — the same path the app itself uses.
+    PASS/FAIL is decided by the essence gates, the durable efficiency gates
+    e@999 + frontLoad, the hole gate, and (new, Phase 3) the protrusion and
+    jaggedness gates — exact mirror of the hole gate and a contour-roughness
+    ratio respectively, both HARD gates at worst-view (see PROTRUSION_/
+    JAGGEDNESS_ constants in <code>test/metrics.js</code>);
+    <code>gateScheme: "phase3-metric-hardening"</code>. The structural edge
+    term (StructEdge column) is report-only — becomes a gate with the decal
+    phase. triShare/cov@50/cov@200/waste/bottomHalf are informative-only,
+    colored against the aspirational Phase-C targets. EssenceScore replaces
+    FaithScore as headline; meanIoU/meanΔE are reported-only.</p>
   <div id="controls">
     <button id="btn-run">Run All</button>
     <span id="status"></span>
+    <span class="badge" id="fitter-badge"></span>
+    <span class="badge" id="build-tag-badge" title="BUILD_TAG exported by engine/convert/converter.js — measurement reliability mandate item (a), see the doctrine comment at the top of the script below"></span>
   </div>
+  <div id="determinism-banner" hidden></div>
   <table id="results">
     <thead>
       <tr>
-        <th>Model</th><th>Class</th><th>FaithScore</th><th>meanIoU</th><th>minIoU</th>
-        <th>meanΔE</th><th>Decorations</th><th>Result</th>
+        <th>Model</th><th>Class</th><th>EssenceScore</th><th>Sil</th><th>LFCF</th><th>PPC</th>
+        <th title="Informative only (Phase C target) — not a PASS/FAIL gate since the 2026-07-09 recalibration">triShare</th>
+        <th title="Informative only (Phase C target) — not a PASS/FAIL gate since the 2026-07-09 recalibration">cov@50</th>
+        <th title="Informative only — no Phase C target defined yet">cov@200</th>
+        <th title="GATE — recalibrated interim frontier, see EFFICIENCY_GATES">frontLoad</th>
+        <th title="GATE — recalibrated interim frontier, see EFFICIENCY_GATES">e@999</th>
+        <th title="Informative only (Phase C target) — not a PASS/FAIL gate since the 2026-07-09 recalibration">waste</th>
+        <th title="Informative only — no Phase C target defined yet">bottomHalf</th>
+        <th>meanIoU</th><th>meanΔE</th><th>Decorations</th><th>Holes</th>
+        <th title="GATE — Phase 3 metric hardening: mirror of the hole gate, worst-view largest connected excess-pixel region, target 0, FAIL &gt;3px">Protrusion</th>
+        <th title="GATE — Phase 3 metric hardening: worst-view roughness(recon)/roughness(source) at the 128^2 pyramid level, FAIL &gt;1.15">Jaggedness</th>
+        <th title="Report-only (Phase 3 metric hardening item 3) — Sobel-edge IoU over the 6 face views; becomes a gate with the decal phase">StructEdge</th>
+        <th>Result</th>
       </tr>
     </thead>
     <tbody id="results-body"></tbody>
@@ -77,15 +110,63 @@
   <div id="jsonbar"></div>
 
 <script type="module">
+// ============================================================================
+// MEASUREMENT RELIABILITY DOCTRINE (2026-07-09 mandate — docs/decoration-
+// reduction-plan.md, top status notes, "Organics round 3 ... MEASUREMENT
+// RELIABILITY MANDATE": "a stale-module false 'shiba PASS' survived
+// fresh-tab + no-store server — henceforth every trusted number requires
+// (a) an in-page build-tag assertion visible in the harness, and (b)
+// identical-code double-runs that agree."). Before trusting ANY PASS/FAIL
+// number out of this harness — or any CHANGE in one — all four of the
+// following must hold. None of them substitutes for another: a matching
+// double-run on a stale module still agrees with itself (determinism does
+// not imply correctness), and a fresh tab with the right build tag can
+// still be internally nondeterministic.
+//
+//   1. SERVE FROM THE NO-STORE SERVER. `python _nocache_server.py` from the
+//      repo root (binds :8000). NOT `python -m http.server` — that
+//      heuristically caches ES modules and was the original root cause of
+//      the stale-module hazard (see "INFRA" note, docs/decoration-
+//      reduction-plan.md, "Organics round 1").
+//   2. OPEN A FRESH TAB PER MEASUREMENT. A REUSED tab has been observed to
+//      keep serving stale module instances across ?cb=/reload navigations
+//      even against the no-store server (see "Organics round 2" INFRA
+//      addendum) — always navigate a brand-new tab to the absolute URL,
+//      e.g. http://localhost:8000/test/similarity-harness.html?auto=1.
+//   3. CHECK THE BUILD TAG. The "build:" badge next to the fitter badge
+//      shows BUILD_TAG imported (defensively) from engine/convert/
+//      converter.js — bumped by the engine agent on every edit. Confirm it
+//      matches the commit/edit you intend to measure before reading any
+//      number below it. "no tag" means the export hasn't landed yet (the
+//      harness still runs; treat results as unverified against a specific
+//      build until it does).
+//   4. DOUBLE-RUN BEFORE TRUSTING A PASS/FAIL CHANGE. `?runs=2` (append
+//      `&auto=1` to also auto-start) runs the full suite twice back-to-back
+//      in the same page load and diffs every gate-relevant number
+//      (decorations, holes worstRegionPx, protrusion worstRegionPx,
+//      essenceSil, meanIoU) between the runs — see DETERMINISM_FIELDS /
+//      computeDeterminism below. The DETERMINISM banner must read OK before
+//      a number is trusted; a MISMATCH means module state leaked across
+//      runs or the pipeline is genuinely nondeterministic, and nothing it
+//      produced should be acted on until that is root-caused.
+// ============================================================================
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { extractMeshes } from "../js/extract.js";
 import { convert } from "../engine/convert/converter.js";
 import { buildPreview } from "../js/preview-mesh.js";
-import { silhouetteIoU, meanDeltaE, faithScore } from "./metrics.js";
+import {
+  silhouetteIoU, meanDeltaE, faithScore, erodeMask, interiorMisses,
+  HOLE_EROSION_RADIUS, HOLE_REGION_THRESHOLD_PX,
+  dilateMask, exteriorExcess, PROTRUSION_DILATION_RADIUS, PROTRUSION_REGION_THRESHOLD_PX,
+  jaggednessRatio, JAGGEDNESS_FAIL_THRESHOLD,
+  edgeAgreement, STRUCT_EDGE_TAU,
+  multiScaleSilhouette, coarseLabField, partProportionAgreement, essenceScore,
+  shapeHistogram, areaPercentiles, wasteShare, bottomHalfArea, coverageTopN,
+} from "./metrics.js";
 import {
   VIEW_DIRS, FACE_VIEW_INDEXES, buildOrthoCamera, buildGameplayCamera,
-  renderToPixels, maskFromSilhouette, unionBox,
+  renderToPixels, maskFromSilhouette, unionBox, renderOwnerAreas,
 } from "./views26.js";
 
 // ---------- reference model suite (spec table) ----------
@@ -96,35 +177,178 @@ import {
 // table still shows it, flagged SKIPPED with the reason instead of scored.
 const MODELS = [
   { file: "models/shiba.glb", name: "shiba", cls: "organic" },
-  { file: "models/matilda.glb", name: "matilda", cls: "organic" },
-  { file: "models/just_a_girl.glb", name: "just_a_girl", cls: "organic" },
+  // organic-cloth (DURABLE class, docs/decoration-reduction-plan.md "User
+  // decision (final matilda call): HYBRID" 2026-07-09): matilda is
+  // fragmented-cloth organic — same essence/efficiency thresholds as
+  // "organic" (see ESSENCE_THRESHOLDS/EFFICIENCY_GATES/PHASE_C_ASPIRATIONAL
+  // below), but a durable per-class hole exception (≤6 px instead of the
+  // universal ≤3 px). Sheet-fitter program rounds 1-5 (2026-07-10): flat
+  // slabs, adaptive self-check, point-to-triangle, crest strips, and
+  // partial-cylinder all measured; matilda's post-medial curved-cloth
+  // residual cannot be inscribed ≤3 px by any available primitive — see
+  // docs/decoration-reduction-plan.md. Protrusion is NOT relaxed — stays
+  // ≤3 px (her replacement gives ~1). See HOLE_THRESHOLD_BY_CLASS below for
+  // the actual gate override.
+  { file: "models/matilda.glb", name: "matilda", cls: "organic-cloth" },
+  // thin-sheet (DURABLE class, docs/decoration-reduction-plan.md "USER
+  // DECISION (2026-07-10, campaign close): SHIP + <=6 ALLOWANCE -> 5/5"):
+  // stormterror is a near-planar wing/spike organic — same essence/
+  // efficiency thresholds as "organic" (see ESSENCE_THRESHOLDS/
+  // EFFICIENCY_GATES/PHASE_C_ASPIRATIONAL below), but a durable per-class
+  // PROTRUSION allowance (<=6 px instead of the universal <=3 px). Per-edge
+  // inflation halved the wing-scallop protrusion floor 12 -> 6; the residual
+  // is the substrate-bounded scallop-edge coupling, measured invariant
+  // across all tolerances (see docs/decoration-reduction-plan.md "Per-edge
+  // inflation round (final)" and the sheet fitter round 6 entry above it).
+  // See PROTRUSION_THRESHOLD_BY_CLASS below for the actual gate override.
+  { file: "models/stormterror.glb", name: "stormterror", cls: "thin-sheet" },
   { file: "models/stylized_sword.glb", name: "stylized_sword", cls: "hard-surface" },
-  { file: "models/shattered_crystal_sword.glb", name: "shattered_crystal_sword", cls: "hard-surface" },
+  // hard-surface-translucent (user decision 2026-07-09): high-frequency
+  // iridescent/translucent crystal has no flat-color equivalent — ΔE residual
+  // ~12.75 is palette-invariant (§L3 unrepresentable-class guard). ΔE bar 13.
+  { file: "models/shattered_crystal_sword.glb", name: "shattered_crystal_sword", cls: "hard-surface-translucent" },
   {
     file: "models/japanese_bridge_garden.glb", name: "japanese_bridge_garden", cls: "scene",
     skip: true, skipReason: "specular-glossiness loader gap (materials load all-white)",
   },
 ];
 
-// Gate correction (2026-07-08, docs/decoration-reduction-plan.md "Gate
-// correction"): the fs bar here is mathematically stricter than the iou/de
-// bars combined (e.g. hard-surface iou=0.93 + de=10 can only reach
-// FaithScore ~76 < 85), so a model clearing both per-metric bars could still
-// show FAIL. PASS/FAIL is now per-metric only (iou + de + decoration cap,
-// see `gates` below); fs is kept here only as the headline trend number
-// shown in the table, and no longer gates anything.
-const THRESHOLDS = {
-  organic: { iou: 0.90, de: 8, fs: 82 },
-  "hard-surface": { iou: 0.93, de: 10, fs: 85 },
-  scene: { iou: 0.85, de: 8, fs: 78 },
+// Historical per-metric bars from the Phase 1.5 harness (see "Gate
+// correction", docs/decoration-reduction-plan.md). RETIRED as gates in
+// Phase 2 — Essence capture (2A: "RETIRE meanIoU and meanΔE as gates —
+// keep both as reported-only diagnostic columns"). Not consulted by
+// processModel() anymore; kept only as a comment-quality reference for the
+// numbers still shown in the meanIoU/meanΔE columns.
+// organic: iou>=0.90, de<=8 | hard-surface: iou>=0.93, de<=10 |
+// hard-surface-translucent: iou>=0.93, de<=13 | scene: iou>=0.85, de<=8
+
+// Phase 2 essence gate table (docs/decoration-reduction-plan.md "Phase 2 —
+// Essence capture", 2A "Initial per-class gate table"). essenceSil = MSSA
+// (multi-scale silhouette agreement), lfcf = low-frequency color field ΔE
+// (lower is better, unlike the other ratio-style gates), ppc = part
+// proportions, essSc = EssenceScore headline. UNCHANGED by the 2026-07-09
+// recalibration (see EFFICIENCY_GATES / PHASE_C_ASPIRATIONAL below for the
+// efficiency-column scheme change).
+const ESSENCE_THRESHOLDS = {
+  organic: { essenceSil: 0.90, lfcf: 10, ppc: 0.85, essSc: 78 },
+  // organic-cloth (DURABLE, matilda only — see MODELS comment above):
+  // identical essence thresholds to organic; only the hole gate differs.
+  "organic-cloth": { essenceSil: 0.90, lfcf: 10, ppc: 0.85, essSc: 78 },
+  // thin-sheet (DURABLE, stormterror only — see MODELS comment above):
+  // identical essence thresholds to organic; only the protrusion gate differs.
+  "thin-sheet": { essenceSil: 0.90, lfcf: 10, ppc: 0.85, essSc: 78 },
+  "hard-surface": { essenceSil: 0.92, lfcf: 10, ppc: 0.88, essSc: 82 },
+  "hard-surface-translucent": { essenceSil: 0.92, lfcf: 13, ppc: 0.85, essSc: 78 },
 };
+
+// Efficiency GATES — interim pre-Phase-C frontier gates, recalibrated
+// 2026-07-09 (docs/decoration-reduction-plan.md "Lever-exhaustion round" +
+// "User decision (2026-07-09): RECALIBRATE NOW + PHASE C LATER"). The
+// lever-exhaustion round proved triShare/cov@50/waste structurally
+// unreachable at essenceSil >= 0.90 with any protruding convex/equilateral
+// primitive (ellipsoid, cylinder, AND prism all measured) — the only real
+// unlock is Phase C (SQEM joint-split capsule chains). Per user decision:
+// gates become e@999 + frontLoadRatio ONLY (the real abstraction
+// discriminators — frontLoadRatio is self-referential on e@999, but the pair
+// together catches soup that never front-loads AND soup that never reaches
+// the coarse band at all); triShare/cov@50/waste demote to informative-only
+// (see PHASE_C_ASPIRATIONAL). Re-tighten these values toward the original
+// 0.72–0.85 table when Phase C lands.
+//
+// Recalibration method: run the current suite at default params once, take
+// each class's worst achieved e999/frontLoad, subtract ~0.05 headroom, floor
+// to 2 decimals (floor, not round, so headroom is never accidentally shaved
+// below ~0.05 by rounding up). Measured 2026-07-09 (fitter ON default,
+// hyperCurved default, MAX_DECORATIONS=9990):
+//   organic   — shiba   e999 0.6247 frontLoad 0.6256 (worst of the 3)
+//               matilda e999 0.6515 frontLoad 0.6632
+//               stormterror e999 0.6547 frontLoad 0.7171
+//   hard-surface              — stylized_sword         e999 0.3881 frontLoad 0.3956
+//   hard-surface-translucent  — shattered_crystal_sword e999 0.4746 frontLoad 0.4907
+const EFFICIENCY_GATES = {
+  organic: { e999: 0.57, frontLoad: 0.57 },
+  // organic-cloth (DURABLE, matilda only — see MODELS comment above):
+  // identical efficiency gates to organic; only the hole gate differs.
+  "organic-cloth": { e999: 0.57, frontLoad: 0.57 },
+  // thin-sheet (DURABLE, stormterror only — see MODELS comment above):
+  // identical efficiency gates to organic; only the protrusion gate differs.
+  "thin-sheet": { e999: 0.57, frontLoad: 0.57 },
+  "hard-surface": { e999: 0.33, frontLoad: 0.34 },
+  "hard-surface-translucent": { e999: 0.42, frontLoad: 0.44 },
+};
+
+// triShare / cov@50 / waste — DEMOTED to informative-only (2026-07-09, same
+// user decision as EFFICIENCY_GATES above). No longer part of PASS/FAIL;
+// kept here as the ASPIRATIONAL Phase-C targets (unchanged from the original
+// 2A gate table) so the harness can still color these columns green/amber
+// against where the pipeline eventually needs to land. cov@200 and
+// bottomHalfArea are shown too (same efficiency-diagnostics family) but have
+// no defined Phase-C target yet, so they render as plain informative numbers.
+const PHASE_C_ASPIRATIONAL = {
+  organic: { triShare: 0.55, cov50: 0.55, waste: 0.15 },
+  // organic-cloth (DURABLE, matilda only — see MODELS comment above):
+  // identical aspirational targets to organic; only the hole gate differs.
+  "organic-cloth": { triShare: 0.55, cov50: 0.55, waste: 0.15 },
+  // thin-sheet (DURABLE, stormterror only — see MODELS comment above):
+  // identical aspirational targets to organic; only the protrusion gate differs.
+  "thin-sheet": { triShare: 0.55, cov50: 0.55, waste: 0.15 },
+  "hard-surface": { triShare: 0.40, cov50: 0.70, waste: 0.10 },
+  "hard-surface-translucent": { triShare: 0.40, cov50: 0.70, waste: 0.12 },
+};
+
+// DURABLE per-class hole allowance (docs/decoration-reduction-plan.md
+// "User decision (final matilda call): HYBRID", 2026-07-09): matilda's
+// organic-cloth class gets a ≤6 px hole exception (fragmented-cloth
+// organics) instead of the universal ≤3 px rule (HOLE_REGION_THRESHOLD_PX).
+// Sheet-fitter program rounds 1-5 (2026-07-10): flat slabs, adaptive
+// self-check, point-to-triangle, crest strips, and partial-cylinder all
+// measured; matilda's post-medial curved-cloth residual cannot be
+// inscribed ≤3 px by any available primitive — see
+// docs/decoration-reduction-plan.md. Every other class (including plain
+// "organic") stays on the universal threshold. The protrusion gate is
+// untouched by this — it stays ≤3 px for organic-cloth too (her
+// replacement gives ~1 px).
+const HOLE_THRESHOLD_BY_CLASS = {
+  "organic-cloth": 6,
+};
+function holeThresholdForClass(cls) {
+  return HOLE_THRESHOLD_BY_CLASS[cls] ?? HOLE_REGION_THRESHOLD_PX;
+}
+
+// DURABLE per-class protrusion allowance (docs/decoration-reduction-plan.md
+// "USER DECISION (2026-07-10, campaign close): SHIP + ≤6 ALLOWANCE → 5/5"):
+// stormterror's thin-sheet class gets a ≤6 px protrusion exception (near-
+// planar wing/spike organics) instead of the universal ≤3 px rule
+// (PROTRUSION_REGION_THRESHOLD_PX). Per-edge inflation round (final,
+// 2026-07-10): halved the wing-scallop protrusion floor 12→6; the residual
+// is the substrate-bounded scallop-edge coupling, measured invariant across
+// all tolerances (tol .004–.010, infMax .008–.036) — see
+// docs/decoration-reduction-plan.md. Every other class (including plain
+// "organic") stays on the universal threshold. The hole gate is untouched
+// by this — it stays ≤3 px for thin-sheet too.
+const PROTRUSION_THRESHOLD_BY_CLASS = {
+  "thin-sheet": 6,
+};
+function protrusionThresholdForClass(cls) {
+  return PROTRUSION_THRESHOLD_BY_CLASS[cls] ?? PROTRUSION_REGION_THRESHOLD_PX;
+}
+
+// Quality-vs-count curve K values (2A): essenceSil (silhouette pyramid only,
+// no LFCF/PPC/color pass) measured on buildPreview(decorations.slice(0,K))
+// at each prefix — the strongest soup-vs-abstraction discriminator, since a
+// marginal-gain-ordered emission puts the most important shape first while
+// unordered soup does not. frontLoadRatio = e@999 / e@9990 (the last K is
+// the full in-band decoration count — MAX_DECORATIONS already caps at 9990,
+// so slice(0,9990) is a no-op prefix and its essenceSil is identical to the
+// already-computed full-model essenceSil; reused instead of re-rendered).
+const K_VALUES = [999, 2500, 5000, 9990];
 
 // Decoration budget band (2026-07-08 revision): spend the extra headroom on
 // quality instead of aggressively minimizing count. MAX_DECORATIONS is also
 // the Max Decorations value fed into the converter (mode:'hyper' honors this
 // as its hard cap and derives its leaf-reduction target from it).
 const MIN_DECORATIONS = 4995;
-const MAX_DECORATIONS = 10000;
+const MAX_DECORATIONS = 9990; // 2026-07-09: cap corrected from 10000 (10 × 999 per in-game model)
 
 // gameplay-distance "hero" view direction — matches the app's own default
 // viewer camera angle (js/viewer.js: position.set(3, 2.5, -4)) so the
@@ -133,6 +357,79 @@ const GAMEPLAY_DIR = new THREE.Vector3(3, 2.5, -4).normalize();
 
 const RENDER_SIZE = 512;
 const THUMB_SIZE = 256;
+
+// Round-4 fitter A/B toggle (see convert() call below) — full-page
+// navigation to/from a `?hyperCurved=0/1` URL is how this harness switches
+// runs (ES-module caching means an in-page toggle can't cleanly re-run a
+// fresh converter state; see docs/decoration-reduction-plan.md Phase 1.5
+// round-2 note on cache-busting requiring full navigation).
+//
+// CONFIG-MISMATCH FIX (2026-07-09, Phase 3 metric hardening): this used to
+// be `new URLSearchParams(...).get("hyperCurved") === "1"`, which means the
+// harness's DEFAULT run (plain `?auto=1`, no hyperCurved param) always
+// resolved to `false` and got passed to convert() as an explicit override —
+// silently overriding the shipped app default (`DEFAULT_PARAMS.hyperCurved =
+// true`, engine/convert/converter.js: `{...DEFAULT_PARAMS, ...userParams}`).
+// Every default-run baseline was therefore measuring the documented
+// non-default fitter-OFF path (whose over-cap-drop hole debt is real and
+// expected there — see "Harness & infra notes" above) and got misdiagnosed
+// more than once as engine drift (shiba 5px / matilda 18px holes) when it
+// was actually this harness bug. Fixed by only including the `hyperCurved`
+// key in the params object passed to convert() when the URL explicitly asks
+// for a state, so the converter's own default (true) applies untouched
+// otherwise. `?hyperCurved=0` is now the explicit fitter-OFF A/B control;
+// `?hyperCurved=1` is an explicit (redundant with default) ON, kept for
+// symmetry in shared links.
+const hyperCurvedParam = new URLSearchParams(location.search).get("hyperCurved");
+const HYPER_CURVED_OVERRIDE = hyperCurvedParam === null ? undefined : hyperCurvedParam !== "0";
+{
+  const badge = document.getElementById("fitter-badge");
+  if (HYPER_CURVED_OVERRIDE === undefined) {
+    badge.textContent = "hyperCurved: ON (shipped default, no override)";
+    badge.style.color = "#36d47e";
+  } else {
+    badge.textContent = `hyperCurved: ${HYPER_CURVED_OVERRIDE ? "ON" : "OFF"} (explicit ?hyperCurved=${HYPER_CURVED_OVERRIDE ? "1" : "0"})`;
+    badge.style.color = HYPER_CURVED_OVERRIDE ? "#36d47e" : "#e0c34a";
+  }
+}
+
+// ---------- BUILD-TAG assertion (measurement reliability mandate item 1,
+// see doctrine header above) ----------
+// engine/convert/converter.js is expected to export `export const BUILD_TAG
+// = "<string>";`, bumped by the concurrent engine agent on every edit. This
+// harness is edited by a different agent than the one landing that export,
+// so it MUST tolerate the export not existing yet: a normal static
+// `import { BUILD_TAG } from "..."` would throw a hard SyntaxError ("does
+// not provide an export named 'BUILD_TAG'") and break the entire harness if
+// the export is missing or lags behind. Using a dynamic import + `typeof`
+// check instead degrades gracefully to "no tag". The dynamic import target
+// is the SAME specifier already statically imported above (for `convert`),
+// so this resolves against the already-loaded module record — no double
+// fetch, no extra network round trip.
+let BUILD_TAG = "no tag";
+try {
+  const converterModule = await import("../engine/convert/converter.js");
+  if (typeof converterModule.BUILD_TAG !== "undefined") {
+    BUILD_TAG = converterModule.BUILD_TAG;
+  }
+} catch (err) {
+  console.warn("similarity harness: BUILD_TAG import failed", err);
+}
+{
+  const tagBadge = document.getElementById("build-tag-badge");
+  tagBadge.textContent = `build: ${BUILD_TAG}`;
+  tagBadge.style.color = BUILD_TAG === "no tag" ? "#e0c34a" : "#8b93a3";
+}
+
+// ---------- DOUBLE-RUN MODE (measurement reliability mandate item 2, see
+// doctrine header above) ----------
+// `?runs=2` (or any integer >=2) runs the full suite that many times
+// back-to-back in this same page load; `?runs=1` or the param omitted
+// preserves the original single-run behavior exactly (NUM_RUNS = 1 is a
+// no-op through every branch below). See runAll()/runOnce()/
+// computeDeterminism() near the bottom of this script.
+const runsParam = parseInt(new URLSearchParams(location.search).get("runs"), 10);
+const NUM_RUNS = Number.isFinite(runsParam) && runsParam >= 2 ? runsParam : 1;
 
 // ---------- renderer (offscreen; only used to rasterize into targets) ----------
 const glCanvas = document.createElement("canvas");
@@ -166,9 +463,38 @@ const WHITE_MAT = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.Dou
 // renders both sides through an overrideMaterial white flat pass.
 function toUnlitMaterial(mat) {
   if (!mat) return new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const color = mat.color ? mat.color.clone() : new THREE.Color(0xffffff);
+  // mirrors js/extract.js materialInfo(): "an emissive-only material (no
+  // base map) still shows its emissiveMap" — texture falls back to
+  // emissiveMap when there's no base map, independent of the color fold-in
+  // below.
+  const map = mat.map ?? mat.emissiveMap ?? null;
+  // EMISSIVE PARITY FIX: this function only otherwise carries over
+  // color/map/vertexColors/side/transparency from the source material, so an
+  // emissive-only material (e.g. a black base color with a glowing
+  // emissive/emissiveMap) would render BLACK under this unlit pass, poisoning
+  // the ΔE comparison even though the app itself shows it lit up. Mirrors the
+  // exact fold-in rule js/extract.js's materialInfo() uses ("WYSIWYG: emissive
+  // contributes to the displayed color — fold it in so glowing features
+  // (screens, eyes, neon) don't arrive black"): convert both base color and
+  // emissive*emissiveIntensity to sRGB display space, sum and clamp there
+  // (extract.js sums post-gamma sRGB bytes, not linear light), then convert
+  // the result back to the material's linear working space so the renderer's
+  // own linear->sRGB encode on readback (views26.js renderToPixels, srgb:true)
+  // reproduces the same sRGB sum extract.js computes.
+  if (mat.emissive && (mat.emissive.r || mat.emissive.g || mat.emissive.b)) {
+    const k = mat.emissiveIntensity ?? 1;
+    const baseSrgb = color.clone().convertLinearToSRGB();
+    const emSrgb = mat.emissive.clone().multiplyScalar(k).convertLinearToSRGB();
+    color.setRGB(
+      Math.min(1, baseSrgb.r + emSrgb.r),
+      Math.min(1, baseSrgb.g + emSrgb.g),
+      Math.min(1, baseSrgb.b + emSrgb.b),
+    ).convertSRGBToLinear();
+  }
   return new THREE.MeshBasicMaterial({
-    color: mat.color ? mat.color.clone() : new THREE.Color(0xffffff),
-    map: mat.map ?? null,
+    color,
+    map,
     vertexColors: !!mat.vertexColors,
     side: mat.side ?? THREE.FrontSide,
     transparent: !!mat.transparent,
@@ -189,6 +515,54 @@ function makeUnlit(object3d) {
       ? n.material.map(toUnlitMaterial)
       : toUnlitMaterial(n.material);
   });
+}
+
+// ---------- WYSIWYG source-side translucency exclusion (2026-07-09, user
+// requirement) ----------
+// shattered_crystal_sword's "Special_effects" material is ~4% opacity
+// (opacity 0.041) — js/viewer.js applies no special-casing to transparent
+// source materials, it just alpha-blends them as loaded, so a face that
+// translucent reads as essentially invisible over any background in the
+// app's own viewport. The converter's WYSIWYG opacity rules
+// (engine/convert/converter.js hyperAlphaSkip / opacity-fold, round 5)
+// deliberately KEEP and color-fold these shards instead of dropping them
+// (dropping them at the old 0.5 alpha-cutout threshold punched a 556px
+// hole) — that is the right call for the OUTPUT, but it means every metric
+// here must judge the reconstruction against what a player actually SEES,
+// not against the raw source geometry. Every SOURCE-side render a metric
+// reads from (the white-silhouette override pass feeding essenceSil/PPC/the
+// hole-gate source mask, and the unlit color pass feeding LFCF/meanΔE) must
+// therefore exclude source meshes this translucent; the gameplay-distance
+// thumbnail is a human-facing screenshot, not a metric input, and
+// deliberately renders WITHOUT this exclusion so a reviewer still sees the
+// true (near-invisible) alpha-blended look. Cutoff reuses hyperAlphaSkip's
+// existing "near-fully-transparent" threshold (0.05) for consistency, here
+// applied to MATERIAL opacity rather than texel alpha.
+const SOURCE_INVISIBLE_OPACITY = 0.05;
+
+function meshEffectiveOpacity(mat) {
+  // mirrors js/extract.js materialInfo(): opacity only counts when the
+  // material is actually marked transparent (matches the app/converter's own
+  // WYSIWYG opacity rule, not just a low `.opacity` value on an opaque mat).
+  if (!mat) return 1;
+  return mat.transparent && mat.opacity != null ? mat.opacity : 1;
+}
+
+// Hides (in place) every mesh in `object3d` whose material(s) are ALL below
+// SOURCE_INVISIBLE_OPACITY (a multi-material mesh with even one visible
+// submaterial still counts as visible). Returns the list of meshes it
+// hid, so the caller can restore them afterward.
+function hideInvisibleSourceMeshes(object3d) {
+  const hidden = [];
+  object3d.traverse((n) => {
+    if (!n.isMesh || !n.visible) return;
+    const mats = Array.isArray(n.material) ? n.material : [n.material];
+    if (mats.length && mats.every((m) => meshEffectiveOpacity(m) < SOURCE_INVISIBLE_OPACITY)) {
+      n.visible = false;
+      hidden.push(n);
+    }
+  });
+  return hidden;
 }
 
 // ---------- pixel-buffer -> canvas helpers (row 0 from readRenderTargetPixels
@@ -227,6 +601,70 @@ function overlayCanvas(maskA, maskB, size, outSize = size) {
       img.data[o] = a ? 255 : 0;
       img.data[o + 1] = b ? 255 : 0;
       img.data[o + 2] = (a && b) ? 0 : 0;
+      img.data[o + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  if (outSize === size) return cv;
+  const out = document.createElement("canvas");
+  out.width = outSize; out.height = outSize;
+  out.getContext("2d").drawImage(cv, 0, 0, outSize, outSize);
+  return out;
+}
+
+// Holes overlay: dim gray = reconstruction silhouette, magenta = interior-miss
+// pixels (foreground in the eroded source mask, background in the
+// reconstruction) — lets a human see exactly WHERE a hole is.
+function holesOverlayCanvas(reconMask, missMask, size, outSize = size) {
+  const cv = document.createElement("canvas");
+  cv.width = size; cv.height = size;
+  const ctx = cv.getContext("2d");
+  const img = ctx.createImageData(size, size);
+  for (let y = 0; y < size; y++) {
+    const dstY = size - 1 - y;
+    for (let x = 0; x < size; x++) {
+      const srcIdx = y * size + x;
+      const o = (dstY * size + x) * 4;
+      if (missMask[srcIdx]) {
+        img.data[o] = 255; img.data[o + 1] = 0; img.data[o + 2] = 255;
+      } else if (reconMask[srcIdx]) {
+        img.data[o] = 90; img.data[o + 1] = 90; img.data[o + 2] = 90;
+      } else {
+        img.data[o] = 0; img.data[o + 1] = 0; img.data[o + 2] = 0;
+      }
+      img.data[o + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  if (outSize === size) return cv;
+  const out = document.createElement("canvas");
+  out.width = outSize; out.height = outSize;
+  out.getContext("2d").drawImage(cv, 0, 0, outSize, outSize);
+  return out;
+}
+
+// Protrusion overlay: dim gray = reconstruction silhouette, GREEN = excess
+// pixels (foreground in the recon, background in the dilated source) — same
+// dim-gray-silhouette convention as holesOverlayCanvas above, green chosen
+// (rather than magenta) so a "material sticking out" defect reads visually
+// distinct from a "material missing" hole at a glance.
+function protrusionOverlayCanvas(reconMask, excessMask, size, outSize = size) {
+  const cv = document.createElement("canvas");
+  cv.width = size; cv.height = size;
+  const ctx = cv.getContext("2d");
+  const img = ctx.createImageData(size, size);
+  for (let y = 0; y < size; y++) {
+    const dstY = size - 1 - y;
+    for (let x = 0; x < size; x++) {
+      const srcIdx = y * size + x;
+      const o = (dstY * size + x) * 4;
+      if (excessMask[srcIdx]) {
+        img.data[o] = 0; img.data[o + 1] = 255; img.data[o + 2] = 0;
+      } else if (reconMask[srcIdx]) {
+        img.data[o] = 90; img.data[o + 1] = 90; img.data[o + 2] = 90;
+      } else {
+        img.data[o] = 0; img.data[o + 1] = 0; img.data[o + 2] = 0;
+      }
       img.data[o + 3] = 255;
     }
   }
@@ -279,9 +717,20 @@ async function processModel(def, isFirstModel) {
   }
 
   // Same extraction the app uses on load (js/app.js setModel -> extractMeshes),
-  // and conversion through the real pipeline at hyper-mode defaults.
+  // and conversion through the real pipeline at hyper-mode defaults. The
+  // `hyperCurved` key is only added to the params object when the URL
+  // explicitly overrides it (see HYPER_CURVED_OVERRIDE above) — by default
+  // this omits the key entirely so convert()'s own `{...DEFAULT_PARAMS,
+  // ...userParams}` merge supplies the real shipped default (true, P3
+  // essence fitter ON) untouched, matching what the app itself does on
+  // every load. `?hyperCurved=0` is the explicit fitter-OFF A/B control. The
+  // fitter's own internal gating (converter.js: protectedComps>0 forces it
+  // back off) still exempts bypassed source-exact models (the swords)
+  // regardless of this setting — only non-bypassed organic bulk is affected.
   const extracted = extractMeshes(sourceObject);
-  const result = convert({ meshes: extracted.meshes }, { mode: "hyper", maxDecorations: MAX_DECORATIONS });
+  const convertParams = { mode: "hyper", maxDecorations: MAX_DECORATIONS };
+  if (HYPER_CURVED_OVERRIDE !== undefined) convertParams.hyperCurved = HYPER_CURVED_OVERRIDE;
+  const result = convert({ meshes: extracted.meshes }, convertParams);
   const preview = buildPreview(result.decorations, result.params);
 
   // Reconstruction mesh: unlit, vertex-colored — identical material to the
@@ -312,10 +761,52 @@ async function processModel(def, isFirstModel) {
   const boxRecon = new THREE.Box3().setFromBufferAttribute(reconGeo.attributes.position);
   const box = unionBox(boxSrc, boxRecon);
 
+  // WYSIWYG source-side translucency exclusion (see hideInvisibleSourceMeshes
+  // above) — applies for the ENTIRE metric-computation loop below (silhouette
+  // masks, hole gate, essenceSil/PPC, color passes) and gets restored before
+  // the gameplay-distance thumbnail so that human-facing screenshot still
+  // shows the true alpha-blended source.
+  const invisibleMeshes = hideInvisibleSourceMeshes(sourceObject);
+
   let iouSum = 0, minIoU = Infinity, worstIdx = -1, worstMaskA = null, worstMaskB = null;
   const faceDEs = [];
   const perView = [];
   let alignmentOverlay = null;
+
+  // Phase 2 essence metrics (docs/decoration-reduction-plan.md "Phase 2 —
+  // Essence capture", 2A): MSSA (essenceSil) and PPC accumulate over all 26
+  // views; LFCF accumulates over the 6 face views alongside the legacy
+  // per-pixel ΔE, reusing the same colA/colB renders. sourceMasks is cached
+  // for reuse by the quality-vs-count curve below (avoids re-rendering the
+  // source silhouette per K).
+  let essenceSilSum = 0, minSil = Infinity, ppcSum = 0, lfcfSum = 0;
+  const sourceMasks = [];
+
+  // Hole gate (docs/decoration-reduction-plan.md "Hole gate"): reuses the
+  // silhouette masks computed for IoU below — no extra rendering. Tracks the
+  // view with the single largest interior-miss connected component across
+  // all 26 views; the gate only needs that max (see gates.holes below).
+  let worstHolesRegion = -1, worstHolesView = -1, worstHolesTotal = 0;
+  let worstHolesMaskA = null, worstHolesMaskB = null;
+
+  // Protrusion gate (Phase 3 metric hardening item 1, docs/decoration-
+  // reduction-plan.md § 8): exact mirror of the hole-gate accumulators above
+  // — same reused silhouette masks, same "track only the single worst view"
+  // shape, opposite direction (excess = recon material sticking out past the
+  // dilated source, not source material the recon fails to cover).
+  let worstProtRegion = -1, worstProtView = -1, worstProtTotal = 0;
+  let worstProtMaskA = null, worstProtMaskB = null;
+
+  // Jaggedness gate (Phase 3 metric hardening item 2): mean + worst-view
+  // ratio across all 26 views (see JAGGEDNESS_FAIL_THRESHOLD calibration note
+  // in metrics.js) — gated on the worst view, same "one bad view fails the
+  // model" convention as holes/protrusion.
+  let jagSum = 0, worstJag = -Infinity, worstJagView = -1;
+
+  // Structural edge term (Phase 3 metric hardening item 3, report-only):
+  // accumulated over the 6 face views alongside LFCF/meanDeltaE, reusing the
+  // same colA/colB/intersection already rendered for those metrics.
+  let structEdgeSum = 0;
 
   for (let i = 0; i < VIEW_DIRS.length; i++) {
     const dir = VIEW_DIRS[i];
@@ -336,7 +827,47 @@ async function processModel(def, isFirstModel) {
       worstMaskB = maskB;
     }
 
-    const entry = { dir: [dir.x, dir.y, dir.z], iou };
+    const holes = interiorMisses(maskA, maskB, RENDER_SIZE, RENDER_SIZE, HOLE_EROSION_RADIUS);
+    if (holes.largestRegion > worstHolesRegion) {
+      worstHolesRegion = holes.largestRegion;
+      worstHolesView = i;
+      worstHolesTotal = holes.totalPixels;
+      worstHolesMaskA = maskA;
+      worstHolesMaskB = maskB;
+    }
+
+    // Protrusion gate: excess = recon AND NOT dilate(source, 5) — argument
+    // order (reconMask, sourceMask) matches exteriorExcess's spec-literal
+    // signature (see metrics.js).
+    const prot = exteriorExcess(maskB, maskA, RENDER_SIZE, RENDER_SIZE, PROTRUSION_DILATION_RADIUS);
+    if (prot.largestRegion > worstProtRegion) {
+      worstProtRegion = prot.largestRegion;
+      worstProtView = i;
+      worstProtTotal = prot.totalPixels;
+      worstProtMaskA = maskA;
+      worstProtMaskB = maskB;
+    }
+
+    const jag = jaggednessRatio(maskA, maskB, RENDER_SIZE, RENDER_SIZE);
+    jagSum += jag;
+    if (jag > worstJag) {
+      worstJag = jag;
+      worstJagView = i;
+    }
+
+    sourceMasks.push(maskA);
+    const sil = multiScaleSilhouette(maskA, maskB, RENDER_SIZE, RENDER_SIZE);
+    essenceSilSum += sil;
+    if (sil < minSil) minSil = sil;
+    const ppcView = partProportionAgreement(maskA, maskB, RENDER_SIZE, RENDER_SIZE);
+    ppcSum += ppcView;
+
+    const entry = {
+      dir: [dir.x, dir.y, dir.z], iou, essenceSil: sil, ppc: ppcView,
+      holesLargestRegion: holes.largestRegion, holesTotalPixels: holes.totalPixels,
+      protrusionLargestRegion: prot.largestRegion, protrusionTotalPixels: prot.totalPixels,
+      jaggedness: jag,
+    };
 
     const isFaceView = FACE_VIEW_INDEXES.includes(i);
     if (isFaceView) {
@@ -352,6 +883,12 @@ async function processModel(def, isFirstModel) {
       const de = meanDeltaE(colA, colB, intersection);
       entry.deltaE = de;
       faceDEs.push(de);
+      const lfcfView = coarseLabField(colA, colB, maskA, maskB, RENDER_SIZE, RENDER_SIZE, 32);
+      entry.lfcf = lfcfView;
+      lfcfSum += lfcfView;
+      const edgeView = edgeAgreement(colA, colB, intersection, RENDER_SIZE, RENDER_SIZE, STRUCT_EDGE_TAU);
+      entry.structEdge = edgeView;
+      structEdgeSum += edgeView;
     }
     perView.push(entry);
 
@@ -365,7 +902,66 @@ async function processModel(def, isFirstModel) {
 
   const meanIoU = iouSum / VIEW_DIRS.length;
   const meanDE = faceDEs.reduce((a, b) => a + b, 0) / faceDEs.length;
-  const fs = faithScore(meanIoU, meanDE);
+  const fs = faithScore(meanIoU, meanDE); // legacy headline — reported only (JSON), see THRESHOLDS comment
+
+  const essenceSil = essenceSilSum / VIEW_DIRS.length;
+  const ppc = ppcSum / VIEW_DIRS.length;
+  const lfcf = lfcfSum / faceDEs.length;
+  const essSc = essenceScore(essenceSil, lfcf, ppc);
+
+  const meanJaggedness = jagSum / VIEW_DIRS.length;
+  const structEdge = structEdgeSum / faceDEs.length;
+
+  // Quality-vs-count curve (2A): essenceSil (silhouette pyramid only, no
+  // color/PPC pass) at each K-prefix of the emission order. Reuses
+  // sourceMasks captured in the main loop above so only the reconstruction
+  // side re-renders. K=9990 is a no-op prefix whenever the model is in-band
+  // (MAX_DECORATIONS already caps at 9990) — reuse the full-model essenceSil
+  // instead of re-rendering an identical mesh.
+  const essenceAtK = {};
+  for (const K of K_VALUES) {
+    if (result.decorations.length <= K) {
+      essenceAtK[K] = essenceSil;
+      continue;
+    }
+    const previewK = buildPreview(result.decorations.slice(0, K), result.params);
+    const geoK = new THREE.BufferGeometry();
+    geoK.setAttribute("position", new THREE.BufferAttribute(previewK.positions, 3));
+    // material is irrelevant — sceneK.overrideMaterial (WHITE_MAT, shared, not
+    // disposed) forces every render to the flat silhouette pass.
+    const meshK = new THREE.Mesh(geoK);
+    const sceneK = new THREE.Scene();
+    sceneK.background = new THREE.Color(0);
+    sceneK.overrideMaterial = WHITE_MAT;
+    sceneK.add(meshK);
+    let sum = 0;
+    for (let i = 0; i < VIEW_DIRS.length; i++) {
+      const cam = buildOrthoCamera(VIEW_DIRS[i], box, 1);
+      const maskK = maskFromSilhouette(renderToPixels(renderer, sceneK, cam, RENDER_SIZE));
+      sum += multiScaleSilhouette(sourceMasks[i], maskK, RENDER_SIZE, RENDER_SIZE);
+    }
+    essenceAtK[K] = sum / VIEW_DIRS.length;
+    geoK.dispose();
+  }
+  const finalK = K_VALUES[K_VALUES.length - 1];
+  const frontLoadRatio = essenceAtK[finalK] > 1e-9 ? essenceAtK[999] / essenceAtK[finalK] : 1;
+
+  // Efficiency diagnostics (the "waste detector"): per-decoration visible
+  // area via the 26-view GPU ID render (test/views26.js renderOwnerAreas),
+  // reusing the SAME `preview` object built above for the reconstruction mesh
+  // (its owners array already maps 1:1 onto result.decorations).
+  const visArea = renderOwnerAreas(renderer, preview, box, RENDER_SIZE);
+  const shapeHist = shapeHistogram(result.decorations);
+  const percentiles = areaPercentiles(visArea);
+  const waste = wasteShare(visArea, 4);
+  const bottomHalf = bottomHalfArea(result.decorations, visArea);
+  const cov50 = coverageTopN(visArea, 50);
+  const cov200 = coverageTopN(visArea, 200);
+
+  // Restore the translucent source meshes hidden for the metric loop above —
+  // the gameplay-distance thumbnail is a human-facing screenshot, not a
+  // metric input, and should show the real alpha-blended source.
+  for (const m of invisibleMeshes) m.visible = true;
 
   // gameplay-distance thumbnail pair
   const camG = buildGameplayCamera(GAMEPLAY_DIR, box, 1);
@@ -376,6 +972,33 @@ async function processModel(def, isFirstModel) {
 
   // worst-IoU-view thumbnail pair (overlay, so the mismatch itself is visible)
   const worstOverlay = overlayCanvas(worstMaskA, worstMaskB, RENDER_SIZE, THUMB_SIZE);
+
+  // worst-holes-view overlay: recompute the eroded-source / miss mask for
+  // just that one view (interiorMisses intentionally only returns summary
+  // counts, not the mask) so the miss pixels can be highlighted for a human.
+  let worstHolesOverlay = null;
+  if (worstHolesView >= 0) {
+    const erodedSrc = erodeMask(worstHolesMaskA, RENDER_SIZE, RENDER_SIZE, HOLE_EROSION_RADIUS);
+    const missMask = new Uint8Array(RENDER_SIZE * RENDER_SIZE);
+    for (let p = 0; p < missMask.length; p++) {
+      missMask[p] = erodedSrc[p] && !worstHolesMaskB[p] ? 1 : 0;
+    }
+    worstHolesOverlay = holesOverlayCanvas(worstHolesMaskB, missMask, RENDER_SIZE, THUMB_SIZE);
+  }
+
+  // worst-protrusion-view overlay: recompute the dilated-source / excess mask
+  // for just that one view (exteriorExcess, same as interiorMisses, only
+  // returns summary counts) so the excess pixels can be highlighted for a
+  // human — mirrors the worst-holes-view block above.
+  let worstProtOverlay = null;
+  if (worstProtView >= 0) {
+    const dilatedSrc = dilateMask(worstProtMaskA, RENDER_SIZE, RENDER_SIZE, PROTRUSION_DILATION_RADIUS);
+    const excessMask = new Uint8Array(RENDER_SIZE * RENDER_SIZE);
+    for (let p = 0; p < excessMask.length; p++) {
+      excessMask[p] = worstProtMaskB[p] && !dilatedSrc[p] ? 1 : 0;
+    }
+    worstProtOverlay = protrusionOverlayCanvas(worstProtMaskB, excessMask, RENDER_SIZE, THUMB_SIZE);
+  }
 
   // cleanup GPU resources before the next (lazily-loaded) model
   sourceObject.traverse((n) => {
@@ -391,36 +1014,82 @@ async function processModel(def, isFirstModel) {
   reconGeo.dispose();
   reconMesh.material.dispose();
 
-  const th = THRESHOLDS[def.cls];
   const decorations = result.decorations.length;
   // Decoration count is FAIL-gating only above the hard cap; below the
   // quality-floor MIN_DECORATIONS it's a non-failing UNDERSPEND warning
   // (budget left on the table, not a correctness problem).
   const overCap = decorations > MAX_DECORATIONS;
   const underspend = decorations < MIN_DECORATIONS;
-  // Per-metric gate (see THRESHOLDS comment above): PASS/FAIL is decided by
-  // these three booleans only. FaithScore (fs) is reported but never gates.
+  const holes = { worstRegionPx: worstHolesRegion, worstView: worstHolesView, totalPx: worstHolesTotal };
+  const protrusion = { worstRegionPx: worstProtRegion, worstView: worstProtView, totalPx: worstProtTotal };
+  const jaggedness = { mean: meanJaggedness, worst: worstJag, worstView: worstJagView };
+
+  // Phase 2 gate scheme, RECALIBRATED 2026-07-09 (docs/decoration-reduction-
+  // plan.md "User decision (2026-07-09): RECALIBRATE NOW + PHASE C LATER"):
+  // essence (essenceSil/lfcf/ppc/essSc) + efficiency (e999/frontLoad only,
+  // see EFFICIENCY_GATES) + holes decide PASS/FAIL. triShare/cov@50/waste are
+  // no longer gates — informative-only, colored against PHASE_C_ASPIRATIONAL
+  // in the UI but excluded from `gates` (and therefore from the FAIL(...)
+  // label and the `pass` boolean) entirely. meanIoU/meanΔE stay reported-only
+  // (retired as gates back in Phase 2 2A — see THRESHOLDS comment above).
+  // holes: hard gate, independent of class EXCEPT for the DURABLE
+  // organic-cloth override (HOLE_THRESHOLD_BY_CLASS above — matilda only,
+  // ≤6 px instead of ≤3 px, structural ceiling measured by sheet-fitter
+  // program rounds 1-5, 2026-07-10). protrusion: hard gate, independent of
+  // class EXCEPT for the DURABLE thin-sheet override
+  // (PROTRUSION_THRESHOLD_BY_CLASS above — stormterror only, ≤6 px instead
+  // of ≤3 px, wing-scallop floor measured by the per-edge inflation round,
+  // 2026-07-10). jaggedness: Phase 3 metric hardening (docs/decoration-
+  // reduction-plan.md § 8) — NEW hard gate, independent of class (NOT
+  // relaxed for any class), same construction as holes. structEdge is
+  // deliberately absent from `gates` — report-only per spec until the decal
+  // phase lands (§ 8 item 4).
+  const eth = ESSENCE_THRESHOLDS[def.cls];
+  const efg = EFFICIENCY_GATES[def.cls];
   const gates = {
-    iou: meanIoU >= th.iou,
-    deltaE: meanDE <= th.de,
+    essenceSil: essenceSil >= eth.essenceSil,
+    lfcf: lfcf <= eth.lfcf,
+    ppc: ppc >= eth.ppc,
+    essSc: essSc >= eth.essSc,
+    frontLoad: frontLoadRatio >= efg.frontLoad,
+    e999: essenceAtK[999] >= efg.e999,
     count: !overCap,
+    holes: worstHolesRegion <= holeThresholdForClass(def.cls),
+    protrusion: worstProtRegion <= protrusionThresholdForClass(def.cls),
+    jaggedness: worstJag <= JAGGEDNESS_FAIL_THRESHOLD,
   };
-  const pass = gates.iou && gates.deltaE && gates.count;
+  const pass = Object.values(gates).every(Boolean);
 
   return {
     model: def.name,
     cls: def.cls,
-    faithScore: fs,
+    faithScore: fs, // legacy headline, reported only — see THRESHOLDS comment
     meanIoU,
     minIoU,
     meanDeltaE: meanDE,
     decorations,
     overCap,
     underspend,
+    holes,
+    protrusion,
+    jaggedness,
+    structEdge,
+    essence: {
+      score: essSc, sil: essenceSil, minSil, lfcf, ppc,
+      atK: { 999: essenceAtK[999], 2500: essenceAtK[2500], 5000: essenceAtK[5000], 9990: essenceAtK[9990] },
+      frontLoadRatio,
+    },
+    efficiency: {
+      triangleShare: shapeHist.triangleShare, volumetricShare: shapeHist.volumetricShare,
+      percentiles, wasteShare: waste, bottomHalfArea: bottomHalf, coverage50: cov50, coverage200: cov200,
+    },
     gates,
     pass,
     perView,
-    thumbs: { gSrc, gRecon, worstOverlay, worstIou: minIoU, alignmentOverlay },
+    thumbs: {
+      gSrc, gRecon, worstOverlay, worstIou: minIoU, alignmentOverlay,
+      worstHolesOverlay, worstProtOverlay,
+    },
   };
 }
 
@@ -435,33 +1104,109 @@ for (const def of MODELS) {
   const tr = document.createElement("tr");
   const detailTr = document.createElement("tr");
   detailTr.className = "detail-row";
-  detailTr.innerHTML = `<td colspan="8"><div class="thumbs"></div></td>`;
+  detailTr.innerHTML = `<td colspan="21"><div class="thumbs"></div></td>`;
   detailTr.hidden = true;
   if (def.skip) {
     tr.className = "pending";
     tr.innerHTML = `
       <td>${def.name}</td><td>${def.cls}</td>
+      <td>–</td><td>–</td><td>–</td><td>–</td>
+      <td>–</td><td>–</td><td>–</td><td>–</td><td>–</td><td>–</td><td>–</td>
+      <td>–</td><td>–</td><td>–</td><td>–</td>
       <td>–</td><td>–</td><td>–</td>
-      <td>–</td><td>–</td>
       <td class="pf">SKIPPED <span class="badge" title="${def.skipReason}">${def.skipReason}</span></td>`;
   } else {
     tr.className = "pending";
     tr.innerHTML = `
       <td>${def.name}</td><td>${def.cls}</td>
-      <td class="fs">–</td><td class="iou">–</td><td class="miniou">–</td>
-      <td class="de">–</td><td class="dec">–</td><td class="pf">pending</td>`;
+      <td class="esssc">–</td><td class="sil">–</td><td class="lfcf">–</td><td class="ppc">–</td>
+      <td class="trishare">–</td><td class="cov50">–</td><td class="cov200">–</td>
+      <td class="frontload">–</td><td class="e999">–</td><td class="waste">–</td><td class="bottomhalf">–</td>
+      <td class="iou">–</td><td class="de">–</td><td class="dec">–</td><td class="holes">–</td>
+      <td class="protrusion">–</td><td class="jaggedness">–</td><td class="structedge">–</td>
+      <td class="pf">pending</td>`;
   }
   tbody.appendChild(tr);
   tbody.appendChild(detailTr);
   rows.set(def.name, { tr, detailTr });
 }
 
+// Short display labels for the gate table (used both by the FAIL(...) cell
+// text and anywhere else a gate name needs to be shown to a human). triShare/
+// cov@50/waste are deliberately absent — demoted to informative-only
+// 2026-07-09, they're no longer keys in `gates` and can't appear in a
+// FAIL(...) label.
+const GATE_LABELS = {
+  essenceSil: "Sil", lfcf: "LFCF", ppc: "PPC", essSc: "EssSc",
+  frontLoad: "frontLoad", e999: "e@999", count: "Cap", holes: "Holes",
+  protrusion: "Protrusion", jaggedness: "Jaggedness",
+};
+
+// Informative-column coloring (2026-07-09 recalibration): green when the
+// measured value already meets the aspirational Phase-C target, amber
+// otherwise — never fails the row, purely a progress indicator. `better`
+// is "le" (lower is better, e.g. triShare/waste) or "ge" (higher is better,
+// e.g. cov50).
+function aspirationalColor(value, target, better) {
+  const meets = better === "le" ? value <= target : value >= target;
+  return meets ? "#36d47e" : "#e0c34a";
+}
+
+// Tiny inline SVG sparkline of the quality-vs-count curve (essenceSil at
+// each K in K_VALUES) for the detail row — lets a human see at a glance
+// whether the model front-loads its silhouette quality (abstraction) or
+// only reaches it near the full budget (soup).
+function sparklineSvg(atK) {
+  const w = 160, h = 48, pad = 4;
+  const vals = K_VALUES.map((k) => atK[k]);
+  const pts = vals.map((v, i) => {
+    const x = pad + (i / (K_VALUES.length - 1)) * (w - 2 * pad);
+    const y = h - pad - Math.max(0, Math.min(1, v)) * (h - 2 * pad);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+  const labels = K_VALUES.map((k, i) => {
+    const x = pad + (i / (K_VALUES.length - 1)) * (w - 2 * pad);
+    return `<text x="${x.toFixed(1)}" y="${h - 1}" font-size="7" fill="#8b93a3" text-anchor="middle">${k}</text>`;
+  }).join("");
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+    <polyline points="${pts}" fill="none" stroke="#36d47e" stroke-width="1.5" />
+    ${vals.map((v, i) => {
+      const x = pad + (i / (K_VALUES.length - 1)) * (w - 2 * pad);
+      const y = h - pad - Math.max(0, Math.min(1, v)) * (h - 2 * pad);
+      return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="1.7" fill="#36d47e" />`;
+    }).join("")}
+  </svg>`;
+}
+
 function renderRow(def, r) {
   const { tr, detailTr } = rows.get(def.name);
   tr.className = r.pass ? "pass" : "fail";
-  tr.querySelector(".fs").textContent = r.faithScore.toFixed(1);
+  tr.querySelector(".esssc").textContent = r.essence.score.toFixed(1);
+  tr.querySelector(".sil").textContent = r.essence.sil.toFixed(3);
+  tr.querySelector(".lfcf").textContent = r.essence.lfcf.toFixed(2);
+  tr.querySelector(".ppc").textContent = r.essence.ppc.toFixed(3);
+  // triShare/cov@50/waste: informative-only since the 2026-07-09
+  // recalibration — colored against PHASE_C_ASPIRATIONAL, never gates the
+  // row. cov@200/bottomHalf: same efficiency-diagnostics family, no defined
+  // Phase-C target yet, so plain (uncolored) display.
+  const asp = PHASE_C_ASPIRATIONAL[r.cls];
+  const trishareCell = tr.querySelector(".trishare");
+  trishareCell.textContent = r.efficiency.triangleShare.toFixed(2);
+  trishareCell.style.color = aspirationalColor(r.efficiency.triangleShare, asp.triShare, "le");
+  const cov50Cell = tr.querySelector(".cov50");
+  cov50Cell.textContent = r.efficiency.coverage50.toFixed(2);
+  cov50Cell.style.color = aspirationalColor(r.efficiency.coverage50, asp.cov50, "ge");
+  tr.querySelector(".cov200").textContent = r.efficiency.coverage200.toFixed(2);
+  // frontLoad/e@999: the actual recalibrated efficiency GATES (see
+  // EFFICIENCY_GATES) — row-level pass/fail already reflects these via
+  // r.pass/r.gates; no per-cell coloring beyond the existing row tint.
+  tr.querySelector(".frontload").textContent = r.essence.frontLoadRatio.toFixed(2);
+  tr.querySelector(".e999").textContent = r.essence.atK[999].toFixed(2);
+  const wasteCell = tr.querySelector(".waste");
+  wasteCell.textContent = r.efficiency.wasteShare.toFixed(2);
+  wasteCell.style.color = aspirationalColor(r.efficiency.wasteShare, asp.waste, "le");
+  tr.querySelector(".bottomhalf").textContent = r.efficiency.bottomHalfArea.toFixed(2);
   tr.querySelector(".iou").textContent = r.meanIoU.toFixed(3);
-  tr.querySelector(".miniou").textContent = r.minIoU.toFixed(3);
   tr.querySelector(".de").textContent = r.meanDeltaE.toFixed(2);
   const decCell = tr.querySelector(".dec");
   decCell.textContent = r.decorations;
@@ -477,18 +1222,103 @@ function renderRow(def, r) {
     badge.textContent = "UNDERSPEND";
     decCell.appendChild(badge);
   }
+  // Target-0 annotation (2026-07-09, user requirement, HOLE_REGION_THRESHOLD_PX
+  // tightened 25 -> 8 -> 3): the goal is LITERAL zero holes, not just "under
+  // the gate" — green only at exactly 0, yellow for 1..HOLE_REGION_THRESHOLD_PX
+  // (passes the gate but isn't the target), red for anything over (fails).
+  // totalPx (every miss pixel across the worst view, vs. worstRegionPx's
+  // single largest connected blob) is shown alongside so "0 vs tiny
+  // scattered noise" is visible at a glance.
+  const holesCell = tr.querySelector(".holes");
+  holesCell.textContent = `${r.holes.worstRegionPx}px / ${r.holes.totalPx}px total (view ${r.holes.worstView})`;
+  holesCell.style.color = r.holes.worstRegionPx === 0 ? "#36d47e" : r.gates.holes ? "#e0c34a" : "#ff6b6b";
+  if (!r.gates.holes) {
+    const badge = document.createElement("span");
+    badge.className = "badge";
+    badge.style.color = "#ff6b6b";
+    badge.textContent = "HOLE";
+    holesCell.appendChild(badge);
+  }
+  // DURABLE organic-cloth hole exception (see HOLE_THRESHOLD_BY_CLASS
+  // above, docs/decoration-reduction-plan.md "User decision (final matilda
+  // call): HYBRID"): loudly flag matilda's row with a distinct amber
+  // annotation whenever this class is in play, so the ≤6 px allowance is
+  // never mistaken for the universal ≤3 px norm. Sheet-fitter program
+  // rounds 1-5 (2026-07-10) measured a structural ceiling — matilda's
+  // post-medial curved-cloth residual cannot be inscribed ≤3 px by any
+  // available primitive — see docs/decoration-reduction-plan.md.
+  if (r.cls === "organic-cloth") {
+    const tempThreshold = holeThresholdForClass(r.cls);
+    const tempBadge = document.createElement("span");
+    tempBadge.className = "badge";
+    tempBadge.style.color = "#ffb648";
+    tempBadge.style.border = "1px solid #ffb648";
+    tempBadge.title = "durable per-class exception: structural ceiling measured by sheet-fitter program rounds 1-5 (2026-07-10), no available primitive inscribes the residual ≤3px";
+    tempBadge.textContent = `${r.holes.worstRegionPx}px (cloth ≤${tempThreshold})`;
+    holesCell.appendChild(tempBadge);
+  }
+  // Protrusion gate (Phase 3 metric hardening item 1): exact mirror of the
+  // holes cell above — target-0 annotation, green only at literal 0, yellow
+  // 1..PROTRUSION_REGION_THRESHOLD_PX, red (FAIL) above.
+  const protCell = tr.querySelector(".protrusion");
+  protCell.textContent = `${r.protrusion.worstRegionPx}px / ${r.protrusion.totalPx}px total (view ${r.protrusion.worstView})`;
+  protCell.style.color = r.protrusion.worstRegionPx === 0 ? "#36d47e" : r.gates.protrusion ? "#e0c34a" : "#ff6b6b";
+  if (!r.gates.protrusion) {
+    const badge = document.createElement("span");
+    badge.className = "badge";
+    badge.style.color = "#ff6b6b";
+    badge.textContent = "PROTRUSION";
+    protCell.appendChild(badge);
+  }
+  // DURABLE thin-sheet protrusion exception (see PROTRUSION_THRESHOLD_BY_CLASS
+  // above, docs/decoration-reduction-plan.md "USER DECISION (2026-07-10,
+  // campaign close)"): loudly flag stormterror's row with a distinct amber
+  // annotation whenever this class is in play, so the ≤6 px allowance is
+  // never mistaken for the universal ≤3 px norm. Per-edge inflation round
+  // (final, 2026-07-10) measured the wing-scallop floor — per-edge inflation
+  // halved it 12→6; the residual is the substrate-bounded scallop-edge
+  // coupling, invariant across all tolerances — see
+  // docs/decoration-reduction-plan.md.
+  if (r.cls === "thin-sheet") {
+    const sheetThreshold = protrusionThresholdForClass(r.cls);
+    const sheetBadge = document.createElement("span");
+    sheetBadge.className = "badge";
+    sheetBadge.style.color = "#ffb648";
+    sheetBadge.style.border = "1px solid #ffb648";
+    sheetBadge.title = "durable per-class exception: wing-scallop floor measured by the per-edge inflation round (2026-07-10) — halved 12→6, residual is the substrate-bounded scallop-edge coupling, invariant across all tolerances";
+    sheetBadge.textContent = `${r.protrusion.worstRegionPx}px (sheet ≤${sheetThreshold})`;
+    protCell.appendChild(sheetBadge);
+  }
+  // Jaggedness gate (Phase 3 metric hardening item 2): worst-view ratio +
+  // mean, colored the same green/amber/red scheme keyed off the gate (no
+  // "target 0" concept here — 1.0 is the ideal, not 0).
+  const jagCell = tr.querySelector(".jaggedness");
+  jagCell.textContent = `${r.jaggedness.worst.toFixed(2)} worst / ${r.jaggedness.mean.toFixed(2)} mean (view ${r.jaggedness.worstView})`;
+  jagCell.style.color = r.gates.jaggedness ? "#36d47e" : "#ff6b6b";
+  if (!r.gates.jaggedness) {
+    const badge = document.createElement("span");
+    badge.className = "badge";
+    badge.style.color = "#ff6b6b";
+    badge.textContent = "JAGGED";
+    jagCell.appendChild(badge);
+  }
+  // Structural edge term (Phase 3 metric hardening item 3): report-only, no
+  // gate/badge — plain display (higher = better edge agreement).
+  tr.querySelector(".structedge").textContent = r.structEdge.toFixed(3);
   if (r.pass) {
     tr.querySelector(".pf").textContent = "PASS";
   } else {
-    const failed = [];
-    if (!r.gates.iou) failed.push("IoU");
-    if (!r.gates.deltaE) failed.push("ΔE");
-    if (!r.gates.count) failed.push("Cap");
+    const failed = Object.keys(r.gates).filter((k) => !r.gates[k]).map((k) => GATE_LABELS[k] || k);
     tr.querySelector(".pf").textContent = `FAIL (${failed.join("+")})`;
   }
 
   const thumbs = detailTr.querySelector(".thumbs");
   thumbs.innerHTML = "";
+
+  const sparkWrap = thumbGroup(`Quality-vs-count (essenceSil @ ${K_VALUES.join("/")}) — frontLoadRatio ${r.essence.frontLoadRatio.toFixed(2)}`);
+  sparkWrap.pair.innerHTML = sparklineSvg(r.essence.atK);
+  thumbs.appendChild(sparkWrap.wrap);
+
   const g = thumbGroup("Gameplay-distance view (source | reconstruction)");
   addThumb(g.pair, r.thumbs.gSrc, "Source");
   addThumb(g.pair, r.thumbs.gRecon, "Reconstruction");
@@ -497,6 +1327,18 @@ function renderRow(def, r) {
   const w = thumbGroup(`Worst view overlay — IoU ${r.thumbs.worstIou.toFixed(3)} (red=source only, green=recon only, yellow=both)`);
   addThumb(w.pair, r.thumbs.worstOverlay, "Worst-IoU overlay");
   thumbs.appendChild(w.wrap);
+
+  if (r.thumbs.worstHolesOverlay) {
+    const h = thumbGroup(`Worst holes view — ${r.holes.worstRegionPx}px region (view ${r.holes.worstView}); magenta=interior miss, gray=reconstruction`);
+    addThumb(h.pair, r.thumbs.worstHolesOverlay, "Holes overlay");
+    thumbs.appendChild(h.wrap);
+  }
+
+  if (r.thumbs.worstProtOverlay) {
+    const p = thumbGroup(`Worst protrusion view — ${r.protrusion.worstRegionPx}px region (view ${r.protrusion.worstView}); green=excess pixels, gray=reconstruction`);
+    addThumb(p.pair, r.thumbs.worstProtOverlay, "Protrusion overlay");
+    thumbs.appendChild(p.wrap);
+  }
 
   if (r.thumbs.alignmentOverlay) {
     const a = thumbGroup("Alignment sanity check (red=source only, green=recon only, yellow=both)");
@@ -508,9 +1350,15 @@ function renderRow(def, r) {
 
 let results = [];
 
-async function runAll() {
-  runBtn.disabled = true;
-  results = [];
+// Runs the full suite once, rendering rows live exactly as the original
+// single-run code did. `runLabel` prefixes the status text (e.g.
+// "Run 2/2: ") so multi-run progress under DOUBLE-RUN MODE (see NUM_RUNS
+// above) is distinguishable from a stale single-run status line; it's ""
+// under the default NUM_RUNS === 1 path, reproducing the original text
+// exactly. Returns the run's results as a fresh local array — the caller
+// (runAll) decides what to do with one run's array vs. several.
+async function runOnce(runLabel) {
+  const runResults = [];
   const scoredModels = MODELS.filter((def) => !def.skip);
   let firstScored = true;
   for (let i = 0; i < MODELS.length; i++) {
@@ -519,11 +1367,11 @@ async function runAll() {
       // row already renders as SKIPPED at setup time — nothing to run.
       continue;
     }
-    statusEl.textContent = `Running ${def.name} (${scoredModels.indexOf(def) + 1}/${scoredModels.length})…`;
+    statusEl.textContent = `${runLabel}Running ${def.name} (${scoredModels.indexOf(def) + 1}/${scoredModels.length})…`;
     try {
       const r = await processModel(def, firstScored);
       firstScored = false;
-      results.push(r);
+      runResults.push(r);
       renderRow(def, r);
     } catch (err) {
       console.error(`similarity harness: ${def.name} failed`, err);
@@ -532,29 +1380,175 @@ async function runAll() {
       tr.querySelector(".pf").textContent = "ERROR: " + err.message;
     }
   }
-  const skippedCount = MODELS.length - scoredModels.length;
-  statusEl.textContent = `Done — ${results.length}/${scoredModels.length} models scored` +
-    (skippedCount ? `, ${skippedCount} skipped.` : ".");
-  runBtn.disabled = false;
-  window.__RESULTS__ = results;
-  offerDownload(results);
+  return runResults;
 }
 
-function offerDownload(results) {
+// ---------- DOUBLE-RUN determinism check (measurement reliability mandate
+// item 2, see doctrine header above) ----------
+// Deliberately narrow to the exact gate-relevant numbers named by the
+// mandate — decorations, holes/protrusion worstRegionPx, essenceSil,
+// meanIoU — not the full result object: perView/thumbs differ trivially in
+// object identity (fresh canvases/arrays each run) without meaning
+// anything, and would just be mismatch noise here.
+const DETERMINISM_FIELDS = [
+  { key: "decorations", get: (r) => r.decorations },
+  { key: "holes.worstRegionPx", get: (r) => r.holes.worstRegionPx },
+  { key: "protrusion.worstRegionPx", get: (r) => r.protrusion.worstRegionPx },
+  { key: "essenceSil", get: (r) => r.essence.sil },
+  { key: "meanIoU", get: (r) => r.meanIoU },
+];
+
+// Compares every run in `allRuns` (array of per-run runOnce() result arrays)
+// against the first run, field-by-field, model-by-model, using strict
+// equality — under identical code + identical inputs these numbers should
+// come out bit-identical, so ANY drift (including float noise) is exactly
+// the "module state or nondeterminism" signal the mandate says must not be
+// trusted. A model missing from a later run (it errored — see the catch in
+// runOnce above) is skipped here rather than reported as a mismatch; that's
+// a different, already-visible failure (the row shows "ERROR: ...").
+function computeDeterminism(allRuns) {
+  const mismatches = [];
+  if (allRuns.length < 2) return { ok: true, mismatches };
+  const base = allRuns[0];
+  for (const baseR of base) {
+    for (let run = 1; run < allRuns.length; run++) {
+      const curR = allRuns[run].find((r) => r.model === baseR.model);
+      if (!curR) continue;
+      for (const field of DETERMINISM_FIELDS) {
+        const a = field.get(baseR);
+        const b = field.get(curR);
+        if (a !== b) {
+          mismatches.push({ model: baseR.model, field: field.key, run1: a, [`run${run + 1}`]: b });
+        }
+      }
+    }
+  }
+  return { ok: mismatches.length === 0, mismatches };
+}
+
+// `det === null` (single-run mode) hides the banner entirely — it has
+// nothing to report and showing it would just be visual noise on every
+// normal (non-?runs=2) load.
+function renderDeterminismBanner(det) {
+  const el = document.getElementById("determinism-banner");
+  if (!det) {
+    el.hidden = true;
+    el.className = "";
+    return;
+  }
+  el.hidden = false;
+  if (det.ok) {
+    el.className = "ok";
+    el.textContent = `DETERMINISM: OK — ${NUM_RUNS} runs, decorations/holes/protrusion/essenceSil/meanIoU matched across every model.`;
+  } else {
+    el.className = "mismatch";
+    const list = det.mismatches.map((m) => {
+      const runKeys = Object.keys(m).filter((k) => k.startsWith("run"));
+      return `${m.model}.${m.field} (${runKeys.map((k) => `${k}=${m[k]}`).join(" vs ")})`;
+    }).join("; ");
+    el.textContent = `DETERMINISM: MISMATCH — module state or nondeterminism, do not trust these numbers. ${list}`;
+  }
+}
+
+async function runAll() {
+  runBtn.disabled = true;
+  renderDeterminismBanner(null);
+  const allRuns = [];
+  for (let run = 0; run < NUM_RUNS; run++) {
+    const label = NUM_RUNS > 1 ? `Run ${run + 1}/${NUM_RUNS}: ` : "";
+    allRuns.push(await runOnce(label));
+  }
+  results = allRuns[allRuns.length - 1];
+  const determinism = NUM_RUNS > 1 ? computeDeterminism(allRuns) : null;
+  renderDeterminismBanner(determinism);
+
+  const scoredModels = MODELS.filter((def) => !def.skip);
+  const skippedCount = MODELS.length - scoredModels.length;
+  const runsSuffix = NUM_RUNS > 1 ? ` (${NUM_RUNS} runs — see DETERMINISM banner)` : "";
+  statusEl.textContent = `Done — ${results.length}/${scoredModels.length} models scored` +
+    (skippedCount ? `, ${skippedCount} skipped.` : ".") + runsSuffix;
+  runBtn.disabled = false;
+  // window.__RESULTS__ stays the per-model array (unchanged shape, so any
+  // existing consumer indexing/mapping over it keeps working) with buildTag
+  // + determinism attached as extra top-level properties — arrays are
+  // objects, so this is a normal property assignment, not a shape change.
+  window.__RESULTS__ = results;
+  window.__RESULTS__.buildTag = BUILD_TAG;
+  window.__RESULTS__.determinism = determinism;
+  offerDownload(results, determinism);
+}
+
+function offerDownload(results, determinism) {
   jsonBar.innerHTML = "";
-  const payload = results.map((r) => ({
+  const perModel = results.map((r) => ({
     model: r.model,
-    faithScore: r.faithScore,
+    cls: r.cls,
+    faithScore: r.faithScore, // legacy headline, kept for continuity — reported only
     meanIoU: r.meanIoU,
     minIoU: r.minIoU,
     meanDeltaE: r.meanDeltaE,
     decorations: r.decorations,
     overCap: r.overCap,
     underspend: r.underspend,
-    gates: r.gates,
+    holes: r.holes,
+    protrusion: r.protrusion, // Phase 3 metric hardening item 1 — mirror of
+    // holes; see gates.protrusion below (HARD gate).
+    jaggedness: r.jaggedness, // Phase 3 metric hardening item 2 — mean/worst
+    // contourRoughness ratio at the 128^2 pyramid level; see
+    // gates.jaggedness below (HARD gate).
+    structEdge: r.structEdge, // Phase 3 metric hardening item 3 — Sobel-edge
+    // IoU over the 6 face views; REPORT-ONLY (not in `gates`), becomes a
+    // gate with the decal phase.
+    essence: r.essence,
+    efficiency: r.efficiency, // informative metrics (triangleShare/coverage50/
+    // coverage200/wasteShare/bottomHalfArea/etc.) kept in full even though
+    // triShare/cov@50/waste no longer gate — see gates below.
+    gates: r.gates, // 2026-07-09 scheme: essenceSil/lfcf/ppc/essSc + e999/
+    // frontLoad (recalibrated, see EFFICIENCY_GATES) + count/holes; Phase 3
+    // metric hardening (2026-07-09) adds protrusion/jaggedness as further
+    // HARD gates, independent of class, same construction as holes.
     pass: r.pass,
     perView: r.perView,
+    // DURABLE marker (docs/decoration-reduction-plan.md "User decision
+    // (final matilda call): HYBRID"): only present on the organic-cloth
+    // (matilda) entry, so regression diffs carry the exception explicitly
+    // instead of silently absorbing a holes-gate shift. Durable per
+    // sheet-fitter program rounds 1-5 (2026-07-10) measuring a structural
+    // ceiling — see docs/decoration-reduction-plan.md.
+    ...(r.cls === "organic-cloth" ? { classException: "holes<=6 durable (structural ceiling, sheet-fitter rounds 1-5)" } : {}),
+    // DURABLE marker (docs/decoration-reduction-plan.md "USER DECISION
+    // (2026-07-10, campaign close)"): only present on the thin-sheet
+    // (stormterror) entry, so regression diffs carry the exception
+    // explicitly instead of silently absorbing a protrusion-gate shift.
+    // Durable per the per-edge inflation round (final, 2026-07-10) — see
+    // docs/decoration-reduction-plan.md.
+    ...(r.cls === "thin-sheet" ? { classException: "protrusion<=6 durable (wing-scallop floor, per-edge inflation rounds)" } : {}),
   }));
+  // gateScheme: "phase2-interim" (2026-07-09) — flags that efficiency gating
+  // is the recalibrated e@999+frontLoad-only interim scheme (docs/
+  // decoration-reduction-plan.md "User decision (2026-07-09): RECALIBRATE NOW
+  // + PHASE C LATER"), not the original triShare/cov@50/frontLoad/e999/waste
+  // table. Re-tighten/rename when Phase C lands.
+  // "phase2-durable" (user decision 2026-07-09): e@999 + frontLoad adopted as
+  // the durable efficiency gates; cov@50/triShare/waste stay informative.
+  // "phase3-metric-hardening" (2026-07-09, docs/decoration-reduction-plan.md
+  // § 8 "Metric hardening"): adds protrusion + jaggedness as further HARD
+  // gates (see gates.protrusion/gates.jaggedness above) and structEdge as a
+  // report-only column; the phase2-durable essence/efficiency/holes gates
+  // are otherwise unchanged.
+  const payload = {
+    gateScheme: "phase3-metric-hardening",
+    // Measurement reliability mandate (see doctrine header at the top of
+    // this script): buildTag is item 1 (which engine/convert/converter.js
+    // build produced these numbers — "no tag" if BUILD_TAG hasn't landed
+    // yet); determinism is item 2 (double-run agreement — null under the
+    // default single-run mode, i.e. ?runs unset or 1; {ok, mismatches[]}
+    // under ?runs=2+, see computeDeterminism above).
+    buildTag: BUILD_TAG,
+    determinism,
+    generatedAt: new Date().toISOString(),
+    results: perModel,
+  };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");

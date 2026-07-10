@@ -7,7 +7,7 @@
 // palette-exact colors — so merging collapses maximally without visible
 // color drift.
 
-import { qemReduce } from './qem.js';
+import { qemReduce, allocateComponentBudget } from './qem.js';
 
 // ---------- CIELAB ----------
 
@@ -233,6 +233,105 @@ export function countComponents(tris, weldFrac = 1e-4) {
   return roots.size;
 }
 
+// ---------- low-poly-source-bypass analysis (round-3 item 1) ----------
+
+// Weld the RAW (pre-subdivision) world-space triangles, split into connected
+// components, and flag each triangle whose component's source shape already
+// fits its share of the leaf budget as `protect`. Downstream, QEM locks the
+// silhouette edges of protected components so their source outline is preserved
+// verbatim (only interior colour subdivision is decimated) — the biggest cause
+// of thin/faceted-object silhouette loss was QEM churning source geometry that
+// was already under budget (shattered_crystal_sword: 2,219 source tris, ~5,400
+// leaf budget, yet its shards were re-derived from a 40k subdivided mesh).
+// Mutates each raw triangle in place, adding `.protect` (boolean).
+export function analyzeRawComponents(raw, leafTarget, stats, opts = {}) {
+  const weldFrac = opts.weldFrac ?? 2e-5;
+  const floorFaces = opts.floorFaces ?? 12;
+  const n = raw.length;
+  if (!n) return;
+  let minX = 1/0, minY = 1/0, minZ = 1/0, maxX = -1/0, maxY = -1/0, maxZ = -1/0;
+  for (const t of raw) for (const q of t.p) {
+    if (q.x < minX) minX = q.x; if (q.x > maxX) maxX = q.x;
+    if (q.y < minY) minY = q.y; if (q.y > maxY) maxY = q.y;
+    if (q.z < minZ) minZ = q.z; if (q.z > maxZ) maxZ = q.z;
+  }
+  const maxDim = Math.max(maxX - minX, maxY - minY, maxZ - minZ);
+  if (!(maxDim > 0)) { for (const t of raw) t.protect = false; return; }
+  const eps = maxDim * weldFrac;
+  const nx = Math.floor((maxX - minX) / eps) + 3;
+  const ny = Math.floor((maxY - minY) / eps) + 3;
+  const vmap = new Map();
+  const parent = [];
+  const find = (i) => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+  const union = (a, b) => { a = find(a); b = find(b); if (a !== b) parent[b] = a; };
+  const vid = (q) => {
+    const qx = Math.round((q.x - minX) / eps), qy = Math.round((q.y - minY) / eps), qz = Math.round((q.z - minZ) / eps);
+    const k = (qz * ny + qy) * nx + qx;
+    let id = vmap.get(k);
+    if (id === undefined) { id = parent.length; parent.push(id); vmap.set(k, id); }
+    return id;
+  };
+  const triRoot = new Int32Array(n);
+  const area = (p) => {
+    const ux = p[1].x - p[0].x, uy = p[1].y - p[0].y, uz = p[1].z - p[0].z;
+    const vx = p[2].x - p[0].x, vy = p[2].y - p[0].y, vz = p[2].z - p[0].z;
+    return Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx) / 2;
+  };
+  for (let i = 0; i < n; i++) {
+    const p = raw[i].p;
+    const a = vid(p[0]), b = vid(p[1]), c = vid(p[2]);
+    union(a, b); union(b, c);
+    triRoot[i] = a;
+  }
+  // compress component ids
+  const compId = new Map();
+  let C = 0;
+  const compOf = (i) => { const r = find(i); let c = compId.get(r); if (c === undefined) { c = C++; compId.set(r, c); } return c; };
+  const triComp = new Int32Array(n);
+  for (let i = 0; i < n; i++) triComp[i] = compOf(triRoot[i]);
+  const srcCount = new Int32Array(C), srcArea = new Float64Array(C);
+  for (let i = 0; i < n; i++) { srcCount[triComp[i]]++; srcArea[triComp[i]] += area(raw[i].p); }
+  // allocate the leaf budget across components (shared water-filling allocator)
+  const compTarget = allocateComponentBudget(C, srcCount, srcArea, leafTarget, floorFaces, null);
+  // protect iff the component's whole source shape fits its budget share
+  // (after water-filling, compTarget caps at srcCount, so this is: the
+  // component's area share is at least its source triangle count)
+  const protect = new Uint8Array(C);
+  let pc = 0, protArea = 0, totArea = 0;
+  for (let c = 0; c < C; c++) {
+    totArea += srcArea[c];
+    if (srcCount[c] <= compTarget[c]) { protect[c] = 1; pc++; protArea += srcArea[c]; }
+  }
+  // Gate: only bypass a FULLY-COHERENT low-poly model — one where EVERY
+  // non-trivial component fits its budget (stylized_sword 15/15,
+  // shattered_crystal_sword 43/43). A MIX of bypassed shards + QEM'd big shards
+  // fuzzes the silhouette worse than clean all-QEM (measured 0.825 vs 0.846 on
+  // shattered before water-filling let all its shards fit). So if ANY
+  // significant component is unprotected, disable the bypass entirely (all-QEM)
+  // — those models (matilda, just_a_girl) pass on their own and the budget-spend
+  // loop handles their counts.
+  const areaFrac = totArea > 0 ? protArea / totArea : 0;
+  if (stats) { stats.protAreaFrac = Math.round(areaFrac * 100) / 100; }
+  // count "significant" unprotected components (larger than the passthrough floor)
+  let bigUnprotected = 0;
+  for (let c = 0; c < C; c++) if (!protect[c] && srcCount[c] > floorFaces) bigUnprotected++;
+  if (bigUnprotected > 0) { protect.fill(0); pc = 0; }
+  let pt = 0;
+  for (let i = 0; i < n; i++) {
+    const c = triComp[i];
+    const on = protect[c] === 1;
+    raw[i].protect = on;
+    raw[i]._comp = c;
+    // Per-component colour-subdivision budget: protected comps subdivide only
+    // up to their leaf share (silhouette already exact from source geometry —
+    // extra leaves buy colour, not shape); unprotected comps subdivide freely
+    // (QEM decimates them afterwards).
+    raw[i]._leafBudget = compTarget[c];
+    if (on) pt++;
+  }
+  if (stats) { stats.rawComponents = C; stats.protectedComps = pc; stats.protectedTris = pt; }
+}
+
 // ---------- working-mesh reduction ----------
 
 // Reduce colored leaves toward the target count with a SINGLE vertex-
@@ -300,7 +399,15 @@ function clusterAt(tris, gridRes) {
 // Before coloring: interior cull + component stats.
 export function hyperPreprocess(raw, params, stats) {
   stats.components = countComponents(raw) ?? undefined;
-  const res = cullInterior(raw, params.hyperCullRes ?? 72);
+  // Interior culling only for DENSE meshes. The voxel flood-fill can't tell an
+  // enclosed inner shell (cull) from a thin concavity whose opening is narrower
+  // than a voxel (keep) — on low-poly models (matilda) it false-culls visible
+  // faces and punches holes, and higher resolution only shifts which view is
+  // worst (non-monotonic). On dense scans cells are small vs features so it is
+  // safe and pays for itself; below the threshold QEM+bandSpend handle budget.
+  const cullMin = params.hyperCullMinTris ?? 150000;
+  if (params.hyperCull === false || raw.length < cullMin) return raw;
+  const res = cullInterior(raw, params.hyperCullRes ?? 96);
   if (res.culled) stats.culledInterior = res.culled;
   return res.tris;
 }
@@ -397,18 +504,17 @@ export function hyperReduce(colored, params, stats, leafTargetOverride = null) {
   };
   const entries = colored.map((t) => ({ color: t.color, w: area(t) + 1e-12 }));
   // Budget-coupled palette size (plan §2.1, cheap-lever round-2 item): more
-  // decoration budget buys more flat colors. At the 4995-10000 band the default
+  // decoration budget buys more flat colors. At the 4995-9990 band the default
   // palette scales 32 -> 64 with the cap (just_a_girl uses only 17/32 by
   // default but 36/64 when allowed, and fails on fine-detail ΔE). An explicit
   // hyperColors slider value (anything other than the 32 default) still wins.
   const capForColors = params.maxDecorations || 99900;
   let defColors = 32;
   if (capForColors < 99900) {
-    const t = Math.max(0, Math.min(1, (capForColors - 4995) / (10000 - 4995)));
-    // 32 -> 48 across the band. Capped below the 64 slider max: pushing to 64
-    // over-fragments shading-gradient models (shiba's fur clusters to 53 flat
-    // colors at ΔE6, none of them identity) for no ΔE win, while 48 still
-    // clears the fine-detail models that actually use the slots (just_a_girl 36).
+    const t = Math.max(0, Math.min(1, (capForColors - 4995) / (9990 - 4995)));
+    // 32 -> 48 across the band. (64 gave no measured ΔE gain — the fine-detail
+    // models cluster to ~36 colours at ΔE6 regardless — and risks fragmenting
+    // shading-gradient models, so stay at 48.)
     defColors = Math.round(32 + 16 * t);
   }
   const chosenColors = (params.hyperColors && params.hyperColors !== 32)

@@ -1,0 +1,118 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>gate-probe: emit-snap + per-model reach landing</title>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/" } }
+</script>
+<style>body{background:#14161a;color:#d8dbe0;font:12px/1.4 monospace;padding:16px}
+#tag{color:#8b93a3}.done{color:#36d47e}pre{white-space:pre-wrap}</style></head>
+<body><div id="tag">loading…</div><div id="status">running…</div><pre id="out"></pre>
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { extractMeshes } from "./js/extract.js";
+import { convert, BUILD_TAG } from "./engine/convert/converter.js";
+import { buildPreview } from "./js/preview-mesh.js";
+import { VIEW_DIRS, buildOrthoCamera, renderToPixels, maskFromSilhouette, unionBox } from "./test/views26.js";
+import { interiorMisses, exteriorExcess, multiScaleSilhouette, jaggednessRatio,
+  HOLE_EROSION_RADIUS, PROTRUSION_DILATION_RADIUS } from "./test/metrics.js";
+
+document.getElementById("tag").textContent = "BUILD_TAG: " + BUILD_TAG;
+const SZ = 512;
+const out = document.getElementById("out");
+const WHITE = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+
+// Curated landing candidates. shiba pinned reach 0.010 (sacred). matilda swept
+// genuine-coverage range 0.010-0.020 x snap {20,30}; d0.6+reach.030 kept as the
+// known fictional-coverage reference (round-8 near-miss holes 107).
+const MODELS = {
+  shiba: [
+    { label: "snap20(reach.010)", p: { hyperEmitSnapDeg: 20 } },
+    { label: "snap30(reach.010)", p: { hyperEmitSnapDeg: 30 } },
+    { label: "base(reach.010,snap1)", p: {} },
+  ],
+  matilda: [
+    { label: "snap30(reach.010)", p: { hyperEmitSnapDeg: 30 } },
+    { label: "snap30+reach.012", p: { hyperEmitSnapDeg: 30, sphereMeshReachTol: 0.012 } },
+    { label: "snap30+reach.015", p: { hyperEmitSnapDeg: 30, sphereMeshReachTol: 0.015 } },
+    { label: "snap30+reach.018", p: { hyperEmitSnapDeg: 30, sphereMeshReachTol: 0.018 } },
+    { label: "snap30+reach.020", p: { hyperEmitSnapDeg: 30, sphereMeshReachTol: 0.020 } },
+    { label: "snap20+reach.015", p: { hyperEmitSnapDeg: 20, sphereMeshReachTol: 0.015 } },
+    { label: "d0.6+reach.030+snap30(FICT ref)", p: { sphereMeshDensityReplace: 0.6, sphereMeshReachTol: 0.030, hyperEmitSnapDeg: 30 } },
+  ],
+};
+
+const renderer = new THREE.WebGLRenderer({ antialias: false });
+renderer.setSize(SZ, SZ);
+
+async function loadObj(file) {
+  const gltf = await new GLTFLoader().loadAsync(file);
+  const obj = gltf.scene; obj.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(obj);
+  const h = box.max.y - box.min.y;
+  if (h > 1e-9) { obj.scale.multiplyScalar(2 / h); obj.updateMatrixWorld(true); }
+  return obj;
+}
+function whiteSceneOf(obj) {
+  const s = new THREE.Scene(); s.background = new THREE.Color(0);
+  s.add(obj); s.overrideMaterial = WHITE; return s;
+}
+function reconSceneOf(decorations, params) {
+  const preview = buildPreview(decorations, params);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(preview.positions, 3));
+  const m = new THREE.Mesh(g, WHITE);
+  const s = new THREE.Scene(); s.background = new THREE.Color(0); s.add(m);
+  return { scene: s, geo: g };
+}
+
+function gateFor(obj, decorations, params) {
+  const { scene: recScene, geo } = reconSceneOf(decorations, params);
+  const srcScene = whiteSceneOf(obj);
+  const boxSrc = new THREE.Box3().setFromObject(obj);
+  const boxRec = new THREE.Box3().setFromBufferAttribute(geo.attributes.position);
+  const box = unionBox(boxSrc, boxRec);
+  let silSum = 0, worstHole = -1, worstHoleView = -1, worstProt = -1, worstProtView = -1, worstJag = -Infinity;
+  for (let i = 0; i < VIEW_DIRS.length; i++) {
+    const cam = buildOrthoCamera(VIEW_DIRS[i], box, 1);
+    const mA = maskFromSilhouette(renderToPixels(renderer, srcScene, cam, SZ));
+    const mB = maskFromSilhouette(renderToPixels(renderer, recScene, cam, SZ));
+    silSum += multiScaleSilhouette(mA, mB, SZ, SZ);
+    const h = interiorMisses(mA, mB, SZ, SZ, HOLE_EROSION_RADIUS);
+    if (h.largestRegion > worstHole) { worstHole = h.largestRegion; worstHoleView = i; }
+    const pr = exteriorExcess(mB, mA, SZ, SZ, PROTRUSION_DILATION_RADIUS);
+    if (pr.largestRegion > worstProt) { worstProt = pr.largestRegion; worstProtView = i; }
+    const j = jaggednessRatio(mA, mB, SZ, SZ);
+    if (j > worstJag) worstJag = j;
+  }
+  srcScene.remove(obj); geo.dispose();
+  return { essenceSil: silSum / VIEW_DIRS.length, holes: worstHole, holesView: worstHoleView,
+    protrusion: worstProt, protView: worstProtView, jag: worstJag };
+}
+
+const results = {};
+for (let run = 1; run <= 2; run++) {
+  for (const name of Object.keys(MODELS)) {
+    const obj = await loadObj(`test/models/${name}.glb`);
+    const extracted = extractMeshes(obj);
+    out.textContent += `\n===== ${name} run ${run} (BUILD ${BUILD_TAG}) =====\n`;
+    out.textContent += `config                          | preClamp drop | holes prot | essSil  jag\n`;
+    for (const cfg of MODELS[name]) {
+      const res = convert({ meshes: extracted.meshes },
+        { mode: "hyper", maxDecorations: 9990, hyperReplace: true, ...cfg.p });
+      const s = res.stats;
+      const preClamp = (s.placements || res.decorations.length) + (s.dropped || 0);
+      const g = gateFor(obj, res.decorations, res.params);
+      const key = `${name}_r${run}_${cfg.label}`;
+      results[key] = { preClamp, dropped: s.dropped || 0, ...g };
+      const pass = (g.holes <= 3 && g.protrusion <= 3 && g.essenceSil >= 0.90 && preClamp <= 9990 && (s.dropped||0) === 0);
+      out.textContent += `${cfg.label.padEnd(31)} | ${String(preClamp).padStart(7)} ${String(s.dropped||0).padStart(4)} | ${String(g.holes).padStart(5)} ${String(g.protrusion).padStart(4)} | ${g.essenceSil.toFixed(3)} ${g.jag.toFixed(3)} ${pass ? "PASS" : ""} (hv${g.holesView} pv${g.protView})\n`;
+    }
+  }
+}
+window.__GATE = results;
+document.getElementById("status").textContent = "DONE";
+document.getElementById("status").className = "done";
+console.log("GATE_DONE");
+</script></body></html>

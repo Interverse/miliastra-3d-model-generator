@@ -1,0 +1,65 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>hole probe</title>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/" } }
+</script>
+<style>body{background:#222;color:#ddd;font:13px monospace;padding:8px}canvas{margin:4px;border:1px solid #444}</style></head>
+<body><div id="log">running...</div><div id="views"></div>
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { extractMeshes } from "./js/extract.js";
+import { convert } from "./engine/convert/converter.js";
+import { buildPreview } from "./js/preview-mesh.js";
+import { VIEW_DIRS, buildOrthoCamera } from "./test/views26.js";
+const log=(s)=>{document.getElementById('log').textContent+="\n"+s;};
+document.getElementById('log').textContent='';
+const SZ=560;
+function silMask(scene, cam){
+  const rt=new THREE.WebGLRenderer({antialias:false}); rt.setSize(SZ,SZ);
+  rt.render(scene,cam);
+  const c2=document.createElement('canvas'); c2.width=SZ;c2.height=SZ;
+  const ctx=c2.getContext('2d'); ctx.drawImage(rt.domElement,0,0);
+  const d=ctx.getImageData(0,0,SZ,SZ).data; const m=new Uint8Array(SZ*SZ);
+  for(let i=0;i<SZ*SZ;i++){ m[i]=(d[i*4]+d[i*4+1]+d[i*4+2])>60?1:0; }
+  rt.dispose(); return m;
+}
+function whiteScene(geoOrObj){
+  const s=new THREE.Scene(); s.background=new THREE.Color(0);
+  const mat=new THREE.MeshBasicMaterial({color:0xffffff, side:THREE.DoubleSide});
+  if(geoOrObj.isBufferGeometry){ s.add(new THREE.Mesh(geoOrObj,mat)); }
+  else { geoOrObj.traverse(o=>{if(o.isMesh)o.material=mat}); s.add(geoOrObj); }
+  return s;
+}
+const loader=new GLTFLoader();
+const gltf=await loader.loadAsync("test/models/matilda.glb");
+const obj=gltf.scene; const bb0=new THREE.Box3().setFromObject(obj); const h=bb0.max.y-bb0.min.y;
+if(h>1e-9){obj.scale.multiplyScalar(2/h);obj.updateMatrixWorld(true);}
+const extracted=extractMeshes(obj);
+const result=convert({meshes:extracted.meshes},{mode:"hyper",maxDecorations:10000,hyperReplace:true});
+log("dec="+result.decorations.length);
+const preview=buildPreview(result.decorations,result.params);
+const rgeo=new THREE.BufferGeometry();
+rgeo.setAttribute("position",new THREE.BufferAttribute(preview.positions,3));
+const box=new THREE.Box3().setFromObject(obj);
+// render source (obj) and recon from candidate views; diff to find holes
+for(const vi of [3,11,4,5,1]){
+  const cam=buildOrthoCamera(VIEW_DIRS[vi], box, 1);
+  const srcScene=whiteScene(obj); const srcM=silMask(srcScene,cam);
+  const recScene=whiteScene(rgeo); const recM=silMask(recScene,cam);
+  // diff canvas: source&&!recon=RED(hole), recon&&!source=BLUE(protrude), both=gray
+  const cv=document.createElement('canvas'); cv.width=SZ;cv.height=SZ; const cx=cv.getContext('2d');
+  const img=cx.createImageData(SZ,SZ); let holes=0;
+  for(let i=0;i<SZ*SZ;i++){ const s=srcM[i],r=recM[i]; let R=0,G=0,B=0;
+    if(s&&r){R=G=B=90;} else if(s&&!r){R=255;holes++;} else if(!s&&r){B=255;}
+    img.data[i*4]=R;img.data[i*4+1]=G;img.data[i*4+2]=B;img.data[i*4+3]=255; }
+  cx.putImageData(img,0,0);
+  const wrap=document.createElement('div');wrap.style.display='inline-block';
+  const cap=document.createElement('div');cap.textContent='view '+vi+' ('+VIEW_DIRS[vi].toArray().map(x=>x.toFixed(0)).join(',')+') redHolePx~'+holes;
+  wrap.appendChild(cap);wrap.appendChild(cv);document.getElementById('views').appendChild(wrap);
+  log('view '+vi+' redHolePx~'+holes);
+}
+log("DONE");
+</script></body></html>

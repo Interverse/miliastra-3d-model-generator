@@ -1,0 +1,121 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>locate-probe: matilda hole localization + slab yield</title>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/" } }
+</script>
+<style>body{background:#14161a;color:#d8dbe0;font:12px/1.4 monospace;padding:16px}
+#tag{color:#8b93a3}.done{color:#36d47e}pre{white-space:pre-wrap}canvas{margin:4px;border:1px solid #444}</style></head>
+<body><div id="tag">loading…</div><div id="status">running…</div><pre id="out"></pre><div id="views"></div>
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { extractMeshes } from "./js/extract.js";
+import { convert, BUILD_TAG } from "./engine/convert/converter.js";
+import { buildPreview } from "./js/preview-mesh.js";
+import { VIEW_DIRS, buildOrthoCamera, renderToPixels, maskFromSilhouette, unionBox } from "./test/views26.js";
+import { erodeMask, HOLE_EROSION_RADIUS } from "./test/metrics.js";
+
+document.getElementById("tag").textContent = "BUILD_TAG: " + BUILD_TAG;
+const SZ = 512, out = document.getElementById("out"), views = document.getElementById("views");
+const WHITE = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+const renderer = new THREE.WebGLRenderer({ antialias: false });
+renderer.setSize(SZ, SZ);
+
+async function loadObj(file) {
+  const gltf = await new GLTFLoader().loadAsync(file);
+  const obj = gltf.scene; obj.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(obj);
+  const h = box.max.y - box.min.y;
+  if (h > 1e-9) { obj.scale.multiplyScalar(2 / h); obj.updateMatrixWorld(true); }
+  return obj;
+}
+function reconMasks(obj, decorations, params, viewIdxs) {
+  const preview = buildPreview(decorations, params);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(preview.positions, 3));
+  const rs = new THREE.Scene(); rs.background = new THREE.Color(0); rs.add(new THREE.Mesh(g, WHITE));
+  const ss = new THREE.Scene(); ss.background = new THREE.Color(0); ss.add(obj); ss.overrideMaterial = WHITE;
+  const box = unionBox(new THREE.Box3().setFromObject(obj), new THREE.Box3().setFromBufferAttribute(g.attributes.position));
+  const res = {};
+  for (const vi of viewIdxs) {
+    const cam = buildOrthoCamera(VIEW_DIRS[vi], box, 1);
+    res[vi] = { src: maskFromSilhouette(renderToPixels(renderer, ss, cam, SZ)),
+                rec: maskFromSilhouette(renderToPixels(renderer, rs, cam, SZ)) };
+  }
+  ss.remove(obj);
+  return res;
+}
+// largest interior-miss connected component -> bbox/centroid in normalized view coords
+function locate(src, rec, label, vi) {
+  const eroded = erodeMask(src, SZ, SZ, HOLE_EROSION_RADIUS);
+  const miss = new Uint8Array(SZ * SZ);
+  for (let i = 0; i < SZ * SZ; i++) miss[i] = (eroded[i] && !rec[i]) ? 1 : 0;
+  // connected components (4-conn), track largest
+  const lbl = new Int32Array(SZ * SZ).fill(0);
+  let best = { n: 0, minx: 0, miny: 0, maxx: 0, maxy: 0, cx: 0, cy: 0 };
+  const stack = [];
+  for (let p = 0; p < SZ * SZ; p++) {
+    if (!miss[p] || lbl[p]) continue;
+    stack.length = 0; stack.push(p); lbl[p] = 1;
+    let n = 0, minx = SZ, miny = SZ, maxx = 0, maxy = 0, sx = 0, sy = 0;
+    while (stack.length) {
+      const q = stack.pop(), x = q % SZ, y = (q / SZ) | 0;
+      n++; sx += x; sy += y;
+      if (x < minx) minx = x; if (x > maxx) maxx = x; if (y < miny) miny = y; if (y > maxy) maxy = y;
+      const nb = [q - 1, q + 1, q - SZ, q + SZ];
+      for (const r of nb) if (r >= 0 && r < SZ * SZ && miss[r] && !lbl[r]) { lbl[r] = 1; stack.push(r); }
+    }
+    if (n > best.n) best = { n, minx, miny, maxx, maxy, cx: sx / n, cy: sy / n };
+  }
+  // note: image y=0 is TOP row in canvas pixel order from readPixels? readRenderTargetPixels
+  // returns bottom-up. Report both raw and flipped-y for clarity.
+  const nx = (v) => (v / SZ).toFixed(2), ny = (v) => (v / SZ).toFixed(2);
+  out.textContent += `${label} v${vi}: largest miss ${best.n}px | bbox x[${nx(best.minx)}-${nx(best.maxx)}] yRaw[${ny(best.miny)}-${ny(best.maxy)}] | centroid(${nx(best.cx)},${ny(best.cy)}) [y raw: 0=bottom of readpixels]\n`;
+  // draw diff canvas
+  const cv = document.createElement('canvas'); cv.width = SZ; cv.height = SZ; const cx = cv.getContext('2d');
+  const img = cx.createImageData(SZ, SZ);
+  for (let i = 0; i < SZ * SZ; i++) { const s = src[i], r = rec[i]; let R = 0, G = 0, B = 0;
+    if (s && r) { R = G = B = 70; } else if (s && !r) { R = 255; } else if (!s && r) { B = 255; }
+    if (miss[i]) { R = 255; G = 60; B = 0; }
+    img.data[i*4]=R; img.data[i*4+1]=G; img.data[i*4+2]=B; img.data[i*4+3]=255; }
+  cx.putImageData(img, 0, 0);
+  const wrap = document.createElement('div'); wrap.style.display='inline-block';
+  const cap = document.createElement('div'); cap.textContent = `${label} v${vi} miss=${best.n}px (readpixels y-up: top of canvas = model bottom)`;
+  wrap.appendChild(cap); wrap.appendChild(cv); views.appendChild(wrap);
+}
+
+const matilda = await loadObj("test/models/matilda.glb");
+const mMeshes = extractMeshes(matilda).meshes;
+
+// ---- item 3: slab 3-clique yield for matilda (post-filter emitted slabs) ----
+const slabRun = convert({ meshes: mMeshes }, { mode: "hyper", maxDecorations: 9990, hyperReplace: true, _smSlabs: true, sphereMeshReachTol: 0.012, hyperEmitSnapDeg: 30 });
+out.textContent += `SLAB YIELD (matilda, _smSlabs, reach.012,snap30): slabs=${slabRun.stats.curvedSlabs} spheres=${slabRun.stats.curvedSpheres} caps=${slabRun.stats.curvedCylinders} consumed=${slabRun.stats.curvedConsumed}\n`;
+const capRun = convert({ meshes: mMeshes }, { mode: "hyper", maxDecorations: 9990, hyperReplace: true, sphereMeshReachTol: 0.012, hyperEmitSnapDeg: 30 });
+out.textContent += `CAPSULE PATH (matilda, reach.012,snap30): spheres=${capRun.stats.curvedSpheres} caps=${capRun.stats.curvedCylinders} consumed=${capRun.stats.curvedConsumed} residual=${capRun.stats.replaceResidual}\n\n`;
+
+// ---- localization: matilda candidate zero-drop config, worst hole view 1 (+2,7) ----
+const cand = convert({ meshes: mMeshes }, { mode: "hyper", maxDecorations: 9990, hyperReplace: true, sphereMeshReachTol: 0.012, hyperEmitSnapDeg: 30 });
+out.textContent += `[matilda snap30+reach.012 zero-drop candidate] dec=${cand.decorations.length}\n`;
+let m = reconMasks(matilda, cand.decorations, cand.params, [1, 2, 7]);
+for (const vi of [1, 2, 7]) locate(m[1] && m[vi] ? m[vi].src : null, m[vi].rec, "cand", vi);
+
+// ---- item 0: matilda d0.6+reach.030 (fictional), view 1 ----
+const fict = convert({ meshes: mMeshes }, { mode: "hyper", maxDecorations: 9990, hyperReplace: true, sphereMeshDensityReplace: 0.6, sphereMeshReachTol: 0.030, hyperEmitSnapDeg: 30 });
+out.textContent += `\n[matilda d0.6+reach.030 FICTIONAL] dec=${fict.decorations.length}\n`;
+let mf = reconMasks(matilda, fict.decorations, fict.params, [1]);
+locate(mf[1].src, mf[1].rec, "fict", 1);
+
+// ---- shiba snap20 hole attribution (base=1px, snap20=6px) worst view 1,8 ----
+const shiba = await loadObj("test/models/shiba.glb");
+const sMeshes = extractMeshes(shiba).meshes;
+const sSnap = convert({ meshes: sMeshes }, { mode: "hyper", maxDecorations: 9990, hyperReplace: true, hyperEmitSnapDeg: 20 });
+out.textContent += `\n[shiba snap20] dec=${sSnap.decorations.length}\n`;
+let ss = reconMasks(shiba, sSnap.decorations, sSnap.params, [1]);
+locate(ss[1].src, ss[1].rec, "shiba-snap20", 1);
+
+document.getElementById("status").textContent = "DONE";
+document.getElementById("status").className = "done";
+console.log("LOCATE_DONE");
+</script></body></html>

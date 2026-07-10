@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>rep-probe: stage-2 count-lever A/B</title>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+<style>
+  body { background:#14161a; color:#d8dbe0; font:12px/1.4 monospace; padding:16px; }
+  pre { white-space:pre-wrap; }
+  #tag { color:#8b93a3; }
+  .done { color:#36d47e; }
+</style>
+</head>
+<body>
+<div id="tag">loading…</div>
+<div id="status">running…</div>
+<pre id="out"></pre>
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { extractMeshes } from "./js/extract.js";
+import { convert, BUILD_TAG } from "./engine/convert/converter.js";
+
+document.getElementById("tag").textContent = "BUILD_TAG: " + BUILD_TAG;
+
+const MODELS = [
+  { file: "test/models/matilda.glb", name: "matilda" },
+  { file: "test/models/shiba.glb", name: "shiba" },
+];
+
+// stage-2 count levers (preClamp only; gate harness comes after for the winner)
+const CONFIGS = [
+  { label: "base(d3.0,reach.010,snap1)", p: {} },
+  { label: "d1.0", p: { sphereMeshDensityReplace: 1.0 } },
+  { label: "d0.6", p: { sphereMeshDensityReplace: 0.6 } },
+  { label: "reach.020", p: { sphereMeshReachTol: 0.020 } },
+  { label: "reach.030", p: { sphereMeshReachTol: 0.030 } },
+  { label: "d0.6+reach.030", p: { sphereMeshDensityReplace: 0.6, sphereMeshReachTol: 0.030 } },
+  { label: "minR.002", p: { sphereMeshMinRadiusFrac: 0.002 } },
+  { label: "minR.002+reach.030", p: { sphereMeshMinRadiusFrac: 0.002, sphereMeshReachTol: 0.030 } },
+  { label: "snap20", p: { hyperEmitSnapDeg: 20 } },
+  { label: "snap30", p: { hyperEmitSnapDeg: 30 } },
+  { label: "d0.6+reach.030+snap20", p: { sphereMeshDensityReplace: 0.6, sphereMeshReachTol: 0.030, hyperEmitSnapDeg: 20 } },
+  { label: "d0.6+reach.030+snap30", p: { sphereMeshDensityReplace: 0.6, sphereMeshReachTol: 0.030, hyperEmitSnapDeg: 30 } },
+];
+
+async function loadExtract(def) {
+  const gltf = await new GLTFLoader().loadAsync(def.file);
+  const obj = gltf.scene; obj.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(obj);
+  const h = box.max.y - box.min.y;
+  if (h > 1e-9) { obj.scale.multiplyScalar(2 / h); obj.updateMatrixWorld(true); }
+  return extractMeshes(obj);
+}
+
+function runCfg(meshes, extra) {
+  const res = convert({ meshes }, { mode: "hyper", maxDecorations: 9990, hyperReplace: true, ...extra });
+  const s = res.stats;
+  const dropped = s.dropped || 0, placements = s.placements || res.placements.length;
+  return {
+    preClamp: placements + dropped, dropped,
+    consumed: s.replaceConsumed, residual: s.replaceResidual,
+    spheres: s.curvedSpheres, capsules: s.curvedCylinders,
+  };
+}
+
+const out = document.getElementById("out");
+const all = {};
+for (let run = 1; run <= 2; run++) {
+  for (const def of MODELS) {
+    const meshes = (await loadExtract(def)).meshes;
+    out.textContent += `\n===== ${def.name} run ${run} (BUILD ${BUILD_TAG}) =====\n`;
+    // default path reference
+    const b = convert({ meshes }, { mode: "hyper", maxDecorations: 9990 });
+    out.textContent += `DEFAULT(hyperReplace OFF): dec=${b.decorations.length} dropped=${b.stats.dropped||0} preClamp=${b.decorations.length+(b.stats.dropped||0)}\n`;
+    out.textContent += `label                          | preClamp dropped | consumed residual | sph caps\n`;
+    for (const cfg of CONFIGS) {
+      try {
+        const r = runCfg(meshes, cfg.p);
+        all[`${def.name}_r${run}_${cfg.label}`] = r;
+        const under = r.preClamp <= 9990 ? " <=CAP" : "";
+        out.textContent += `${cfg.label.padEnd(30)} | ${String(r.preClamp).padStart(7)} ${String(r.dropped).padStart(6)} | ${String(r.consumed).padStart(8)} ${String(r.residual).padStart(8)} | ${String(r.spheres).padStart(3)} ${String(r.capsules).padStart(4)}${under}\n`;
+      } catch (e) {
+        out.textContent += `${cfg.label}: ERROR ${e.message}\n`;
+      }
+    }
+  }
+}
+window.__REP = all;
+document.getElementById("status").textContent = "DONE";
+document.getElementById("status").className = "done";
+console.log("REP_DONE");
+</script>
+</body>
+</html>

@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Smoke test: renderOwnerAreas ID decode</title>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js"
+  }
+}
+</script>
+</head>
+<body>
+<pre id="out">running...</pre>
+<script type="module">
+// Scratch smoke test for test/views26.js renderOwnerAreas (Phase 2 essence
+// efficiency diagnostics). NOT part of the standalone harness suite — three
+// hand-made decorations, verify decoded IDs are exact before trusting the
+// per-decoration visArea measurement anywhere else. See
+// docs/decoration-reduction-plan.md, "Phase 2 — Essence capture" 2A spec
+// ("SMOKE TEST first ... verify decoded IDs are exact before trusting it").
+import * as THREE from "three";
+import { buildPreview } from "../js/preview-mesh.js";
+import { VIEW_DIRS, buildOrthoCamera, renderOwnerAreas } from "./views26.js";
+
+const out = document.getElementById("out");
+function log(...args) { out.textContent += "\n" + args.join(" "); console.log(...args); }
+
+const decorations = [
+  { kind: "square", position: { x: -150, y: 0, z: 0 }, rotationDeg: { x: 0, y: 0, z: 0 }, scale: { x: 10, y: 10, z: 10 }, color: 0xff0000 },
+  { kind: "sphere", position: { x: 0, y: 0, z: 0 }, rotationDeg: { x: 0, y: 0, z: 0 }, scale: { x: 10, y: 10, z: 10 }, color: 0x00ff00 },
+  { kind: "cylinder", position: { x: 150, y: 0, z: 0 }, rotationDeg: { x: 0, y: 0, z: 0 }, scale: { x: 10, y: 10, z: 10 }, color: 0x0000ff },
+];
+const params = { flipZ: false, eulerOrder: "YXZ" };
+
+const preview = buildPreview(decorations, params);
+const box = new THREE.Box3().setFromBufferAttribute(new THREE.BufferAttribute(preview.positions, 3));
+
+const canvas = document.createElement("canvas");
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setSize(512, 512, false);
+
+const visArea = renderOwnerAreas(renderer, preview, box, 512);
+
+let pass = true;
+const issues = [];
+if (visArea.length !== 3) { pass = false; issues.push(`expected 3 decorations, got visArea.length=${visArea.length}`); }
+for (let i = 0; i < visArea.length; i++) {
+  if (!(visArea[i] > 0)) { pass = false; issues.push(`decoration ${i} visArea=${visArea[i]} (expected > 0)`); }
+}
+log("visArea:", JSON.stringify(Array.from(visArea)));
+
+// Independent decode-exactness check: re-render the ID scene from one view
+// directly (not through renderOwnerAreas) and confirm every pixel decodes to
+// exactly {0,1,2,3} -- no stray IDs from interpolation/precision loss.
+const colors = new Float32Array(preview.owners.length * 9);
+for (let t = 0; t < preview.owners.length; t++) {
+  const id = preview.owners[t] + 1;
+  const r = (id & 255) / 255, g = ((id >> 8) & 255) / 255, b = ((id >> 16) & 255) / 255;
+  for (let k = 0; k < 3; k++) { colors[t * 9 + k * 3] = r; colors[t * 9 + k * 3 + 1] = g; colors[t * 9 + k * 3 + 2] = b; }
+}
+const geo = new THREE.BufferGeometry();
+geo.setAttribute("position", new THREE.BufferAttribute(preview.positions, 3));
+geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }));
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0);
+scene.add(mesh);
+const rt = new THREE.WebGLRenderTarget(512, 512, { type: THREE.UnsignedByteType });
+const buf = new Uint8Array(512 * 512 * 4);
+const idCounts = new Map();
+let strayPixels = 0;
+for (const dir of VIEW_DIRS) {
+  const cam = buildOrthoCamera(dir, box, 1);
+  renderer.setRenderTarget(rt);
+  renderer.setClearColor(0x000000, 1);
+  renderer.clear();
+  renderer.render(scene, cam);
+  renderer.readRenderTargetPixels(rt, 0, 0, 512, 512, buf);
+  for (let p = 0; p < 512 * 512; p++) {
+    const o = p * 4;
+    const id = buf[o] | (buf[o + 1] << 8) | (buf[o + 2] << 16);
+    idCounts.set(id, (idCounts.get(id) || 0) + 1);
+    if (id < 0 || id > 3) strayPixels++;
+  }
+}
+log("decoded id histogram (0=background):", JSON.stringify(Object.fromEntries(idCounts)));
+if (strayPixels > 0) { pass = false; issues.push(`${strayPixels} pixels decoded to an ID outside {0,1,2,3}`); }
+
+log(pass ? "SMOKE TEST PASS" : "SMOKE TEST FAIL: " + issues.join("; "));
+window.__SMOKE_RESULT__ = { pass, issues, visArea: Array.from(visArea), idHistogram: Object.fromEntries(idCounts) };
+</script>
+</body>
+</html>

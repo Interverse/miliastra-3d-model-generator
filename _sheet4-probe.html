@@ -1,0 +1,52 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>sheet4-probe: matilda adaptive inscribe-or-reject sweep</title>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/" } }
+</script>
+<style>body{background:#14161a;color:#d8dbe0;font:12px/1.4 monospace;padding:16px}#tag{color:#8b93a3}.done{color:#36d47e}pre{white-space:pre-wrap}</style></head>
+<body><div id="tag">loading…</div><div id="status">running…</div><pre id="out"></pre>
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { extractMeshes } from "./js/extract.js";
+import { convert, BUILD_TAG } from "./engine/convert/converter.js";
+import { buildPreview } from "./js/preview-mesh.js";
+import { VIEW_DIRS, buildOrthoCamera, renderToPixels, maskFromSilhouette, unionBox } from "./test/views26.js";
+import { interiorMisses, exteriorExcess, multiScaleSilhouette, HOLE_EROSION_RADIUS, PROTRUSION_DILATION_RADIUS } from "./test/metrics.js";
+document.getElementById("tag").textContent = "BUILD_TAG: " + BUILD_TAG;
+const SZ=512, out=document.getElementById("out");
+const WHITE=new THREE.MeshBasicMaterial({color:0xffffff,side:THREE.DoubleSide});
+const renderer=new THREE.WebGLRenderer({antialias:false}); renderer.setSize(SZ,SZ);
+async function loadObj(f){const g=await new GLTFLoader().loadAsync(f);const o=g.scene;o.updateMatrixWorld(true);const b=new THREE.Box3().setFromObject(o);const h=b.max.y-b.min.y;if(h>1e-9){o.scale.multiplyScalar(2/h);o.updateMatrixWorld(true);}return o;}
+function gate(obj,decs,params){const pv=buildPreview(decs,params);const g=new THREE.BufferGeometry();g.setAttribute("position",new THREE.BufferAttribute(pv.positions,3));
+  const rs=new THREE.Scene();rs.background=new THREE.Color(0);rs.add(new THREE.Mesh(g,WHITE));
+  const ss=new THREE.Scene();ss.background=new THREE.Color(0);ss.add(obj);ss.overrideMaterial=WHITE;
+  const box=unionBox(new THREE.Box3().setFromObject(obj),new THREE.Box3().setFromBufferAttribute(g.attributes.position));
+  let sil=0,wh=-1,wp=-1;for(let i=0;i<VIEW_DIRS.length;i++){const cam=buildOrthoCamera(VIEW_DIRS[i],box,1);
+    const mA=maskFromSilhouette(renderToPixels(renderer,ss,cam,SZ)),mB=maskFromSilhouette(renderToPixels(renderer,rs,cam,SZ));
+    sil+=multiScaleSilhouette(mA,mB,SZ,SZ);const h=interiorMisses(mA,mB,SZ,SZ,HOLE_EROSION_RADIUS);if(h.largestRegion>wh)wh=h.largestRegion;
+    const pr=exteriorExcess(mB,mA,SZ,SZ,PROTRUSION_DILATION_RADIUS);if(pr.largestRegion>wp)wp=pr.largestRegion;}
+  ss.remove(obj);g.dispose();return{essSil:sil/VIEW_DIRS.length,holes:wh,prot:wp};}
+const CONF=[
+  {label:"off(no sheet)",p:{}},
+  {label:"pa20 tol.012",p:{hyperSheet:true,sheetPlanarAngle:20}},
+  {label:"pa30 tol.012",p:{hyperSheet:true,sheetPlanarAngle:30}},
+  {label:"pa40 tol.012",p:{hyperSheet:true,sheetPlanarAngle:40}},
+  {label:"pa30 tol.020",p:{hyperSheet:true,sheetPlanarAngle:30,sheetProtrudeTolFrac:0.020}},
+  {label:"pa40 tol.016 mf4",p:{hyperSheet:true,sheetPlanarAngle:40,sheetProtrudeTolFrac:0.016,sheetMinFaces:4}},
+  {label:"pa30 tol.008",p:{hyperSheet:true,sheetPlanarAngle:30,sheetProtrudeTolFrac:0.008}},
+  {label:"pa50 tol.016 iMin.2",p:{hyperSheet:true,sheetPlanarAngle:50,sheetProtrudeTolFrac:0.016,sheetInscribeMin:0.2,sheetMinFaces:4}},
+];
+for(let run=1;run<=2;run++){
+  const obj=await loadObj("test/models/matilda.glb");const meshes=extractMeshes(obj).meshes;
+  out.textContent+=`\n===== matilda run ${run} (BUILD ${BUILD_TAG}) =====\n`;
+  out.textContent+=`config              | acc slabs cons avgIns rejP | preClamp drop | holes prot essSil\n`;
+  for(const c of CONF){const res=convert({meshes},{mode:"hyper",maxDecorations:9990,...c.p});const s=res.stats;
+    const pc=(s.placements||res.decorations.length)+(s.dropped||0);const sh=s.sheet||{};const g=gate(obj,res.decorations,res.params);
+    const pass=(g.holes<=3&&g.prot<=3&&g.essSil>=0.90&&pc<=9990&&(s.dropped||0)===0);
+    out.textContent+=`${c.label.padEnd(19)} | ${String(sh.accepted??"-").padStart(3)} ${String(s.sheetSlabs??"-").padStart(5)} ${String(sh.consumed??"-").padStart(4)} ${String(sh.avgInscribe??"-").padStart(6)} ${String(sh.rejProtrude??"-").padStart(4)} | ${String(pc).padStart(8)} ${String(s.dropped||0).padStart(4)} | ${String(g.holes).padStart(5)} ${String(g.prot).padStart(4)} ${g.essSil.toFixed(3)} ${pass?"PASS":""}\n`;}
+}
+document.getElementById("status").textContent="DONE";document.getElementById("status").className="done";console.log("SHEET4_DONE");
+</script></body></html>

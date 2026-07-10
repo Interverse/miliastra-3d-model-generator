@@ -121,14 +121,14 @@ export function buildPreview(decorations, params) {
         break;
       }
       case 'prism': {
-        const side = d.scale.x * 0.075, hy = d.scale.y * 0.05;
-        const R = side / Math.sqrt(3);
-        const corners = [];
-        for (let i = 0; i < 3; i++) {
-          // -PI/2 start: the in-game prism faces the opposite way (180° on Y)
-          const a = i / 3 * 2 * Math.PI - Math.PI / 2;
-          corners.push([R * Math.cos(a), R * Math.sin(a)]);
-        }
+        // ISOSCELES triangular cross-section: base width from scale.x, depth from
+        // scale.z (independent, exactly like cylinder rx/rz) — the in-game prism
+        // supports a per-axis cross-section; rendering it equilateral (scale.x
+        // only) was a WYSIWYG preview bug. Reduces to the equilateral prism when
+        // scale.z == scale.x (apex -2D/3, base +D/3 keeps the centroid at origin
+        // and the original -PI/2 winding: apex toward -z, base at +z).
+        const W = d.scale.x * 0.075, D = d.scale.z * 0.075 * Math.sqrt(3) / 2, hy = d.scale.y * 0.05;
+        const corners = [[0, -2 * D / 3], [W / 2, D / 3], [-W / 2, D / 3]];
         const top = corners.map(([x, z]) => xf(x, hy, z));
         const bot = corners.map(([x, z]) => xf(x, -hy, z));
         pushTri(top[0], top[1], top[2]);

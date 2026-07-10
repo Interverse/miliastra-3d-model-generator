@@ -116,3 +116,85 @@ export function maskFromSilhouette(rgba, threshold = 16) {
 export function unionBox(a, b) {
   return a.clone().union(b);
 }
+
+// ----------------------------------------------------------------------------
+// Phase 2 efficiency diagnostics (docs/decoration-reduction-plan.md, "Phase 2
+// — Essence capture", 2A): per-decoration visible-area measurement via a
+// 24-bit-RGB GPU ID render, one pass per canonical view, taking the MAX pixel
+// footprint each decoration reaches over all 26 views.
+//
+// This mirrors js/editor/picking.js's IdPicker technique (proven pixel-exact
+// there for click picking): a plain `new THREE.WebGLRenderTarget` with no
+// `samples` option requested (no MSAA) and no `texture.colorSpace` set (raw
+// linear write/read, no sRGB encode on the way out), vertex colors carrying
+// `component/255` exactly, MeshBasicMaterial(vertexColors:true) so every
+// triangle is flat-shaded its owner's exact ID color with no interpolation
+// artifact (buildPreview already gives all 3 vertices of a triangle the same
+// color). Byte order here is spec-literal: r=id&255, g=(id>>8)&255,
+// b=(id>>16)&255 (id = owner+1, 0 reserved for background).
+// ----------------------------------------------------------------------------
+
+// previewGroup: { positions, owners } as returned by js/preview-mesh.js
+// buildPreview() (its `colors` field is unused here — colors are overwritten
+// with ID encodings). box: the same union bbox used for the silhouette/ΔE
+// passes, so views/framing match exactly. Returns a Float32Array of length
+// (max owner index + 1) — pixel count of each decoration's largest
+// footprint across the 26 views.
+export function renderOwnerAreas(renderer, previewGroup, box, size = 512) {
+  const { positions, owners } = previewGroup;
+  let n = 0;
+  for (let i = 0; i < owners.length; i++) if (owners[i] + 1 > n) n = owners[i] + 1;
+  const visArea = new Float32Array(n);
+  if (n === 0) return visArea;
+
+  const colors = new Float32Array(owners.length * 9);
+  for (let t = 0; t < owners.length; t++) {
+    const id = owners[t] + 1; // 0 = background
+    const r = (id & 255) / 255;
+    const g = ((id >> 8) & 255) / 255;
+    const b = ((id >> 16) & 255) / 255;
+    for (let k = 0; k < 3; k++) {
+      colors[t * 9 + k * 3] = r;
+      colors[t * 9 + k * 3 + 1] = g;
+      colors[t * 9 + k * 3 + 2] = b;
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }));
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0);
+  scene.add(mesh);
+
+  const rt = new THREE.WebGLRenderTarget(size, size, { type: THREE.UnsignedByteType });
+  const buf = new Uint8Array(size * size * 4);
+  const counts = new Float32Array(n);
+  const prevRt = renderer.getRenderTarget();
+  const prevClearColor = new THREE.Color();
+  renderer.getClearColor(prevClearColor);
+  const prevClearAlpha = renderer.getClearAlpha();
+  renderer.setClearColor(0x000000, 1);
+
+  for (const dir of VIEW_DIRS) {
+    const cam = buildOrthoCamera(dir, box, 1);
+    renderer.setRenderTarget(rt);
+    renderer.clear();
+    renderer.render(scene, cam);
+    renderer.readRenderTargetPixels(rt, 0, 0, size, size, buf);
+    counts.fill(0);
+    for (let p = 0; p < size * size; p++) {
+      const o = p * 4;
+      const id = buf[o] | (buf[o + 1] << 8) | (buf[o + 2] << 16);
+      if (id > 0) counts[id - 1]++;
+    }
+    for (let i = 0; i < n; i++) if (counts[i] > visArea[i]) visArea[i] = counts[i];
+  }
+
+  renderer.setRenderTarget(prevRt);
+  renderer.setClearColor(prevClearColor, prevClearAlpha);
+  rt.dispose();
+  geo.dispose();
+  mesh.material.dispose();
+  return visArea;
+}

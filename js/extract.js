@@ -85,6 +85,14 @@ function materialInfo(mat, cache) {
   }
   const info = {
     color,
+    // WYSIWYG: a transparent material displays as its color blended toward
+    // what's behind it by (1 - opacity). The app viewer and the similarity
+    // harness both render unlit over a black background, so the displayed
+    // colour of a low-opacity face is ~opacity×color (a 4%-opacity "glow"
+    // shard reads as near-black, not solid). Expose opacity so the hyper
+    // converter can fold it in (direct/voxel/pixel ignore this field, so
+    // their byte-exact output is unchanged). transparent==false => opacity 1.
+    opacity: (mat.transparent && mat.opacity != null) ? mat.opacity : 1,
     // an emissive-only material (no base map) still shows its emissiveMap
     texture: mat.map
       ? textureToPixels(mat.map)
@@ -164,7 +172,7 @@ export function extractMeshes(root) {
     for (const g of groups) {
       const mat = Array.isArray(node.material) ? node.material[g.materialIndex] : node.material;
       const cached = matCache.has(mat);
-      const { color, texture } = materialInfo(mat, matCache);
+      const { color, texture, opacity } = materialInfo(mat, matCache);
       if (!cached && texture) textures.push({ texture, material: mat });
       let indices;
       const end = Math.min(g.start + g.count, index ? index.count : posAttr.count);
@@ -184,6 +192,7 @@ export function extractMeshes(root) {
         matrixWorld: node.matrixWorld.toArray(),
         color,
         texture,
+        opacity,
       });
     }
   });

@@ -1,0 +1,97 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>thin-probe: detector synthetic validation + matilda thin-protect A/B</title>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/" } }
+</script>
+<style>body{background:#14161a;color:#d8dbe0;font:12px/1.4 monospace;padding:16px}
+#tag{color:#8b93a3}.done{color:#36d47e}pre{white-space:pre-wrap}</style></head>
+<body><div id="tag">loading…</div><div id="status">running…</div><pre id="out"></pre>
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { extractMeshes } from "./js/extract.js";
+import { convert, BUILD_TAG, detectThinFaces } from "./engine/convert/converter.js";
+import { buildPreview } from "./js/preview-mesh.js";
+import { VIEW_DIRS, buildOrthoCamera, renderToPixels, maskFromSilhouette, unionBox } from "./test/views26.js";
+import { interiorMisses, exteriorExcess, multiScaleSilhouette,
+  HOLE_EROSION_RADIUS, PROTRUSION_DILATION_RADIUS } from "./test/metrics.js";
+
+document.getElementById("tag").textContent = "BUILD_TAG: " + BUILD_TAG;
+const SZ = 512, out = document.getElementById("out");
+const WHITE = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+const renderer = new THREE.WebGLRenderer({ antialias: false });
+renderer.setSize(SZ, SZ);
+const P = (x,y,z)=>({x,y,z});
+const TRI = (a,b,c)=>({p:[a,b,c],color:[200,200,200]});
+
+// ---- SYNTHETIC VALIDATION: bulk grid (2-manifold) + thin fin strip ----
+function synthetic() {
+  const tris = [], fin = new Set(), G = 8;
+  // grid plane in XZ, y=0
+  const vs = [];
+  for (let i=0;i<=G;i++){ vs.push([]); for (let j=0;j<=G;j++) vs[i].push(P(i,0,j)); }
+  for (let i=0;i<G;i++) for (let j=0;j<G;j++){ tris.push(TRI(vs[i][j],vs[i+1][j],vs[i][j+1])); tris.push(TRI(vs[i+1][j],vs[i+1][j+1],vs[i][j+1])); }
+  const gridCount = tris.length;
+  // thin fin: a 1-wide ribbon rising in Y at x=4, z from 4, alternating left/right
+  const L=[], R=[];
+  for (let k=0;k<=6;k++){ L.push(P(4,k,4)); R.push(P(4.25,k+0.5,4)); }
+  for (let k=0;k<6;k++){ tris.push(TRI(L[k],R[k],L[k+1])); fin.add(tris.length-1); tris.push(TRI(R[k],R[k+1],L[k+1])); fin.add(tris.length-1); }
+  return { tris, fin, gridCount };
+}
+const syn = synthetic();
+for (const be of [1,2]) {
+  const flagged = detectThinFaces(syn.tris, { minBoundaryEdges: be });
+  let finHit=0, gridInterior=0, gridFlagged=0;
+  for (const i of syn.fin) if (flagged.has(i)) finHit++;
+  // grid interior = grid triangle whose 3 verts are all interior (1<=i,j<=G-1) — approximate: count grid faces flagged
+  for (let i=0;i<syn.gridCount;i++) if (flagged.has(i)) gridFlagged++;
+  out.textContent += `SYNTHETIC be=${be}: fin flagged ${finHit}/${syn.fin.size} | grid faces flagged ${gridFlagged}/${syn.gridCount} | total flagged ${flagged.size}\n`;
+}
+out.textContent += `(expect: fin fully flagged at be=1; grid INTERIOR never flagged; grid border/corners may flag at be=1)\n\n`;
+
+// ---- gate helper ----
+async function loadObj(file){ const g=await new GLTFLoader().loadAsync(file); const o=g.scene; o.updateMatrixWorld(true);
+  const b=new THREE.Box3().setFromObject(o); const h=b.max.y-b.min.y; if(h>1e-9){o.scale.multiplyScalar(2/h);o.updateMatrixWorld(true);} return o; }
+function gateFor(obj, decs, params){ const pv=buildPreview(decs,params); const g=new THREE.BufferGeometry();
+  g.setAttribute("position",new THREE.BufferAttribute(pv.positions,3));
+  const rs=new THREE.Scene();rs.background=new THREE.Color(0);rs.add(new THREE.Mesh(g,WHITE));
+  const ss=new THREE.Scene();ss.background=new THREE.Color(0);ss.add(obj);ss.overrideMaterial=WHITE;
+  const box=unionBox(new THREE.Box3().setFromObject(obj),new THREE.Box3().setFromBufferAttribute(g.attributes.position));
+  let sil=0,wh=-1,wp=-1,whv=-1;
+  for(let i=0;i<VIEW_DIRS.length;i++){const cam=buildOrthoCamera(VIEW_DIRS[i],box,1);
+    const mA=maskFromSilhouette(renderToPixels(renderer,ss,cam,SZ)),mB=maskFromSilhouette(renderToPixels(renderer,rs,cam,SZ));
+    sil+=multiScaleSilhouette(mA,mB,SZ,SZ);
+    const h=interiorMisses(mA,mB,SZ,SZ,HOLE_EROSION_RADIUS);if(h.largestRegion>wh){wh=h.largestRegion;whv=i;}
+    const pr=exteriorExcess(mB,mA,SZ,SZ,PROTRUSION_DILATION_RADIUS);if(pr.largestRegion>wp)wp=pr.largestRegion;}
+  ss.remove(obj);g.dispose();return{essSil:sil/VIEW_DIRS.length,holes:wh,whv,prot:wp};
+}
+
+// ---- matilda A/B (rely on class-derived default = ON reach.012; add thin-protect) ----
+const MCONF = [
+  { label:"off(baseline)", p:{} },
+  { label:"tp be2 r600", p:{ hyperThinProtect:true, thinBoundaryEdges:2, thinProtectReserve:600 } },
+  { label:"tp be1 r600", p:{ hyperThinProtect:true, thinBoundaryEdges:1, thinProtectReserve:600 } },
+  { label:"tp be1 r300", p:{ hyperThinProtect:true, thinBoundaryEdges:1, thinProtectReserve:300 } },
+  { label:"tp be1 r1200", p:{ hyperThinProtect:true, thinBoundaryEdges:1, thinProtectReserve:1200 } },
+];
+for(let run=1;run<=2;run++){
+  const obj=await loadObj("test/models/matilda.glb"); const meshes=extractMeshes(obj).meshes;
+  out.textContent+=`\n===== matilda run ${run} (BUILD ${BUILD_TAG}) =====\n`;
+  out.textContent+=`config          | preClamp drop | detected protected | holes prot | essSil (hv)\n`;
+  for(const c of MCONF){ const res=convert({meshes},{mode:"hyper",maxDecorations:9990,...c.p}); const s=res.stats;
+    const pc=(s.placements||res.decorations.length)+(s.dropped||0); const g=gateFor(obj,res.decorations,res.params);
+    const pass=(g.holes<=3&&g.prot<=3&&g.essSil>=0.90);
+    out.textContent+=`${c.label.padEnd(15)} | ${String(pc).padStart(7)} ${String(s.dropped||0).padStart(4)} | ${String(s.thinDetected??"-").padStart(8)} ${String(s.thinProtected??"-").padStart(9)} | ${String(g.holes).padStart(5)} ${String(g.prot).padStart(4)} | ${g.essSil.toFixed(3)} ${pass?"PASS":""} (hv${g.whv})\n`;
+  }
+}
+// ---- generality: shiba (should stay ~1px), stormterror wing-edge detect (report-only) ----
+{ const obj=await loadObj("test/models/shiba.glb"); const meshes=extractMeshes(obj).meshes;
+  const off=convert({meshes},{mode:"hyper",maxDecorations:9990}); const on=convert({meshes},{mode:"hyper",maxDecorations:9990,hyperThinProtect:true,thinBoundaryEdges:1,thinProtectReserve:600});
+  const goff=gateFor(obj,off.decorations,off.params); const gon=gateFor(obj,on.decorations,on.params);
+  out.textContent+=`\nSHIBA off: holes ${goff.holes} prot ${goff.prot} essSil ${goff.essSil.toFixed(3)} | tp: holes ${gon.holes} prot ${gon.prot} essSil ${gon.essSil.toFixed(3)} detected=${on.stats.thinDetected??"-"} protected=${on.stats.thinProtected??"-"}\n`;
+}
+document.getElementById("status").textContent="DONE"; document.getElementById("status").className="done";
+console.log("THIN_DONE");
+</script></body></html>

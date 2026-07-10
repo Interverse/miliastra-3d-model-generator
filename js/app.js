@@ -1369,12 +1369,30 @@ export function initApp({ mode = "gia" } = {}) {
       const score = scoreCurrentModel(viewer, {
         reconPositions: lastResult.positions,
         reconColors: lastResult.colors,
+        reconDecorations: lastResult.decorations,
       });
       renderStats($("score-result"), {
+        [t("score.essence")]: score.essence.score.toFixed(1),
+        [t("score.sil")]: score.essence.sil.toFixed(3),
+        [t("score.lfcf")]: score.essence.lfcf.toFixed(2),
+        [t("score.ppc")]: score.essence.ppc.toFixed(3),
+        [t("score.trishare")]: score.efficiency.triangleShare.toFixed(2),
         [t("score.faith")]: score.faithScore.toFixed(1),
         [t("score.iou")]: score.meanIoU.toFixed(3),
         [t("score.miniou")]: score.minIoU.toFixed(3),
         [t("score.de")]: score.meanDeltaE.toFixed(2),
+        [t("score.holes")]: `${score.holes.worstRegionPx}px / ${score.holes.totalPx}px total (view ${score.holes.worstView})`,
+        [t("score.holesgate")]: score.holesPass
+          ? t("score.pass")
+          : { value: t("score.fail"), warn: true },
+        [t("score.protrusion")]: `${score.protrusion.worstRegionPx}px / ${score.protrusion.totalPx}px total (view ${score.protrusion.worstView})`,
+        [t("score.protrusiongate")]: score.protrusionPass
+          ? t("score.pass")
+          : { value: t("score.fail"), warn: true },
+        [t("score.jaggedness")]: `${score.jaggedness.worst.toFixed(2)} worst / ${score.jaggedness.mean.toFixed(2)} mean`,
+        [t("score.jaggednessgate")]: score.jaggednessPass
+          ? t("score.pass")
+          : { value: t("score.fail"), warn: true },
       });
     } catch (err) {
       console.error(err);

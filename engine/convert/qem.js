@@ -97,7 +97,7 @@ export function qemReduce(leaves, idxOf, target, paletteColors, opts = {}) {
   const weldFrac = opts.weldFrac ?? 2e-5;
   const creaseCos = opts.creaseCos ?? 0.5;   // dihedral(normals) below this = crease
   const penaltyK = opts.penaltyK ?? 120;     // constraint-plane weight (× face area)
-  const floorFaces = opts.floorFaces ?? 12;  // min faces kept per visible component
+  const floorFaces = opts.floorFaces ?? 8;   // min faces kept per visible component
   const maxKeep = opts.maxKeepComponents ?? 4000;
   const flipDot = opts.flipDot ?? 0.1;       // reject collapse if normal·newNormal below
 
@@ -179,6 +179,14 @@ export function qemReduce(leaves, idxOf, target, paletteColors, opts = {}) {
   const compFaces = new Int32Array(C), compArea = new Float64Array(C);
   for (let f = 0; f < F; f++) { compFaces[fcomp[f]]++; compArea[fcomp[f]] += farea[f]; }
   const aliveComp = Int32Array.from(compFaces);
+  // Low-poly-source-bypass (round-3 item 1): a component whose source shape
+  // already fits its leaf budget is marked "protected" upstream. For those we
+  // LOCK the silhouette-defining edges (open boundaries + high-dihedral crease
+  // rims) so the source outline is preserved exactly — subdivision only churns
+  // the flat interior colour, and QEM collapses that alone. Non-protected
+  // components (organics whose shape exceeds budget) behave as before.
+  const compProtect = new Uint8Array(C);
+  for (let f = 0; f < F; f++) if (FPROT[f]) compProtect[fcomp[f]] = 1;
 
   // ---------------- 3. debris guard + per-component budget allocation ---------
   if (C > maxKeep) {
@@ -187,23 +195,11 @@ export function qemReduce(leaves, idxOf, target, paletteColors, opts = {}) {
     for (let i = 0; i < maxKeep; i++) keep[order[i]] = 1;
     for (let f = 0; f < F; f++) if (!keep[fcomp[f]]) { faceAlive[f] = 0; aliveComp[fcomp[f]]--; }
   }
-  const compTarget = new Int32Array(C);
-  let passthrough = 0, bigArea = 0;
-  const big = [];
-  for (let c = 0; c < C; c++) {
-    const cf = aliveComp[c];
-    if (cf <= 0) { compTarget[c] = 0; continue; }
-    if (cf <= floorFaces) { compTarget[c] = cf; passthrough += cf; }
-    else { big.push(c); bigArea += compArea[c]; }
-  }
-  const R = Math.max(0, target - passthrough);
-  for (const c of big) {
-    const cf = aliveComp[c];
-    let al = bigArea > 0 ? Math.round(R * (compArea[c] / bigArea)) : Math.round(R / big.length);
-    if (al < floorFaces) al = floorFaces;
-    if (al > cf) al = cf;
-    compTarget[c] = al;
-  }
+  // Protected (low-poly-source) components pass through untouched — their
+  // colour subdivision was budget-capped upstream and subdivision preserves the
+  // exact source silhouette. Tiny components pass through too.
+  const compTarget = allocateComponentBudget(
+    C, aliveComp, compArea, target, floorFaces, (c) => compProtect[c] === 1);
 
   // ---------------- 4. quadrics (face planes) --------------------------------
   const Q = new Float64Array(V * 10);
@@ -386,6 +382,9 @@ export function qemReduce(leaves, idxOf, target, paletteColors, opts = {}) {
     const u = Math.floor(k / V), v = k % V;
     // boundary + manifold-interior (seam/crease/free) collapsible; only
     // non-manifold locked. Seam/crease already carry penalty quadrics.
+    // Protected components never reduce (compTarget == faceCount, see below),
+    // so their edges drain from the heap without collapsing — the bypass keeps
+    // their subdivision-preserved (== source) silhouette verbatim.
     if (r.c === 1 || r.c === 2) pushEdge(u, v);
   }
 
@@ -452,4 +451,42 @@ export function qemReduce(leaves, idxOf, target, paletteColors, opts = {}) {
     });
   }
   return out;
+}
+
+// Distribute a face/leaf budget across connected components. Tiny components
+// (<= floorFaces) and forced-passthrough components (isPassthrough) keep all
+// their faces; the remaining budget is WATER-FILLED across the rest by area:
+// a component whose area-proportional share exceeds its own face count caps at
+// its face count and RETURNS the excess to the pool for the others, so the
+// budget is actually spent (a plain single-pass allocation silently loses the
+// capped excess and under-reduces, which starved just_a_girl to 7,725 and left
+// matilda drop-clamping). Returns an Int32Array of per-component targets.
+export function allocateComponentBudget(C, faceCounts, areas, target, floorFaces, isPassthrough) {
+  const compTarget = new Int32Array(C);
+  let passthrough = 0;
+  let pool = [];
+  for (let c = 0; c < C; c++) {
+    const cf = faceCounts[c];
+    if (cf <= 0) { compTarget[c] = 0; continue; }
+    if ((isPassthrough && isPassthrough(c)) || cf <= floorFaces) { compTarget[c] = cf; passthrough += cf; }
+    else pool.push(c);
+  }
+  let remaining = Math.max(0, target - passthrough);
+  for (let iter = 0; iter < 8 && pool.length > 0; iter++) {
+    let poolArea = 0;
+    for (const c of pool) poolArea += areas[c];
+    const next = [];
+    let capped = 0;
+    for (const c of pool) {
+      const al = poolArea > 0
+        ? Math.round(remaining * (areas[c] / poolArea))
+        : Math.round(remaining / pool.length);
+      if (al >= faceCounts[c]) { compTarget[c] = faceCounts[c]; capped += faceCounts[c]; }
+      else { compTarget[c] = Math.max(floorFaces, al); next.push(c); }
+    }
+    if (next.length === pool.length || next.length === 0) break; // stable / all capped
+    remaining = Math.max(0, remaining - capped);
+    pool = next;
+  }
+  return compTarget;
 }

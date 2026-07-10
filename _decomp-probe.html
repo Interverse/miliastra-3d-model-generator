@@ -1,0 +1,88 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>decomp probe</title>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+<style>body{background:#111;color:#ddd;font:13px monospace;margin:0;padding:8px} canvas{background:#000;margin:4px;border:1px solid #333} pre{white-space:pre-wrap}</style>
+</head>
+<body>
+<div id="log">loading...</div>
+<div id="views"></div>
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { extractMeshes } from "./js/extract.js";
+import { convert } from "./engine/convert/converter.js";
+import { buildPreview } from "./js/preview-mesh.js";
+
+const log = (s) => { document.getElementById("log").textContent += "\n" + s; };
+document.getElementById("log").textContent = "running...";
+
+const MODELS = [
+  { file: "test/models/matilda.glb", name: "matilda" },
+  { file: "test/models/shiba.glb", name: "shiba" },
+  { file: "test/models/stormterror.glb", name: "stormterror" },
+];
+
+function renderView(preview, size, dir, title) {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(preview.positions, 3));
+  geo.setAttribute("color", new THREE.BufferAttribute(preview.colors, 3));
+  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }));
+  const scene = new THREE.Scene(); scene.background = new THREE.Color(0x000000); scene.add(mesh);
+  geo.computeBoundingBox();
+  const bb = geo.boundingBox, c = new THREE.Vector3(); bb.getCenter(c);
+  const sz = new THREE.Vector3(); bb.getSize(sz);
+  const r = Math.max(sz.x, sz.y, sz.z) * 0.75 || 1;
+  const cam = new THREE.OrthographicCamera(-r, r, r, -r, 0.001, 1000);
+  const d = new THREE.Vector3(...dir).normalize();
+  cam.position.copy(c).add(d.multiplyScalar(r * 4));
+  cam.up.set(0, 1, 0); cam.lookAt(c);
+  const canvas = document.createElement("canvas"); canvas.width = size; canvas.height = size;
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setSize(size, size); renderer.render(scene, cam);
+  const wrap = document.createElement("div"); wrap.style.display = "inline-block";
+  const cap = document.createElement("div"); cap.textContent = title; wrap.appendChild(cap); wrap.appendChild(canvas);
+  document.getElementById("views").appendChild(wrap);
+  renderer.dispose();
+}
+
+const loader = new GLTFLoader();
+const probe = {};
+for (const def of MODELS) {
+  try {
+    const gltf = await loader.loadAsync(def.file);
+    const obj = gltf.scene;
+    const box = new THREE.Box3().setFromObject(obj);
+    const h = box.max.y - box.min.y;
+    if (h > 1e-9) { obj.scale.multiplyScalar(2 / h); obj.updateMatrixWorld(true); }
+    const extracted = extractMeshes(obj);
+    const result = convert({ meshes: extracted.meshes }, {
+      mode: "hyper", maxDecorations: 10000, _dumpParts: true, _dumpPartsColor: true,
+    });
+    probe[def.name] = result.stats.partDump;
+    log(`${def.name}: nParts=${result.stats.partDump.nParts} rawParts=${result.stats.partDump.rawParts} cutEdges=${result.stats.partDump.cutEdges} merged=${result.stats.partDump.merged} faces=${result.stats.partDump.faces}`);
+    log(`   sizes=[${result.stats.partDump.sizes.join(", ")}]`);
+    const preview = buildPreview(result.decorations, result.params);
+    if (def.name === "matilda") {
+      renderView(preview, 460, [0, 0, 1], "matilda front");
+      renderView(preview, 460, [1, 0, 0.2], "matilda side");
+      renderView(preview, 460, [0.5, 0.3, 0.8], "matilda 3/4");
+    } else {
+      renderView(preview, 380, [0.5, 0.2, 1], def.name);
+    }
+  } catch (e) { log(`${def.name} ERROR: ${e.message}`); console.error(e); }
+}
+window.__PROBE__ = probe;
+log("DONE");
+</script>
+</body>
+</html>
