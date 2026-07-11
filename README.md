@@ -121,7 +121,7 @@ rotation:
 | Parameter | Effect |
 |---|---|
 | Priority preset | Fidelity / Balanced / Minimal bundles of the below |
-| Primitives | Triangles / Squares / Both (see below) |
+| Primitives | Triangles / Both (see below) |
 | Decimation | Vertex-clustering simplification of the source mesh (UV-preserving) before conversion — for high-poly models. **Preview decimation** shows the simplified mesh in the viewport while adjusting |
 | Color tolerance | RGB distance treated as "same color" (merge + subdivision) |
 | Texture subdivision depth | Max recursion for texture detail (4ⁿ growth) |
