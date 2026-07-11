@@ -44,11 +44,11 @@ export function renderShell(root, {
       <div id="sprite-params" hidden>
         <label class="row" data-i18n-title="tip.sprite.thick">
           <span data-i18n="sprite.thick"></span>
-          <input type="number" id="p-sprite-thick" value="0.1" min="0.001" max="10" step="0.05">
+          <input type="number" id="p-sprite-thick" value="0.1" min="0.05" max="10" step="0.05">
         </label>
         <label class="row" data-i18n-title="tip.sprite.px">
           <span data-i18n="sprite.px"></span>
-          <input type="number" id="p-sprite-px" value="0.05" min="0.001" max="1" step="0.01">
+          <input type="number" id="p-sprite-px" value="0.05" min="0.01" max="1" step="0.01">
         </label>
         <label class="row" data-i18n-title="tip.sprite.od">
           <span data-i18n="sprite.od"></span>
@@ -62,13 +62,13 @@ export function renderShell(root, {
       <summary data-i18n="panel.transform"></summary>
       <label class="row" data-i18n-title="tip.tf.unit">
         <span data-i18n="tf.unit"></span>
-        <input type="number" id="p-unit" value="1" min="0.0001" step="0.1">
+        <input type="number" id="p-unit" value="1" min="0.1" step="0.1">
       </label>
       <div class="row-triple" data-i18n-title="tip.tf.scale">
         <span data-i18n="tf.scale"></span>
-        <input type="number" id="t-sx" value="1" min="0.0001" step="0.1">
-        <input type="number" id="t-sy" value="1" min="0.0001" step="0.1">
-        <input type="number" id="t-sz" value="1" min="0.0001" step="0.1">
+        <input type="number" id="t-sx" value="1" min="0.1" step="0.1">
+        <input type="number" id="t-sy" value="1" min="0.1" step="0.1">
+        <input type="number" id="t-sz" value="1" min="0.1" step="0.1">
       </div>
       <div class="row-triple" data-i18n-title="tip.tf.pivot">
         <span data-i18n="tf.pivot"></span>
@@ -200,7 +200,7 @@ export function renderShell(root, {
         <summary data-i18n="adv.title"></summary>
         <label class="row" id="row-thin" data-i18n-title="tip.adv.thin">
           <span data-i18n="adv.thin"></span>
-          <input type="number" id="p-thin" value="0.01" min="0.01" max="10" step="0.05">
+          <input type="number" id="p-thin" value="0.01" min="0.01" max="10" step="0.01">
         </label>
         <label class="row" data-i18n-title="tip.adv.flipz">
           <span data-i18n="adv.flipz"></span>
@@ -288,7 +288,7 @@ export function renderShell(root, {
       <div class="tb-group">
         <button class="tb-btn" id="tb-space" data-i18n="tb.world" data-i18n-title="tip.tb.space"></button>
         <button class="tb-btn tb-toggle" id="tb-snap" data-i18n="tb.snap" data-i18n-title="tip.tb.snap"></button>
-        <input type="number" id="tb-snapstep" value="1" min="0.01" step="0.5" data-i18n-title="tip.tb.snapstep">
+        <input type="number" id="tb-snapstep" value="1" min="0.5" step="0.5" data-i18n-title="tip.tb.snapstep">
       </div>
       <div class="tb-group">
         <button class="tb-btn" id="tb-focus" data-i18n="tb.focus" data-i18n-title="tip.tb.focus"></button>
@@ -320,7 +320,7 @@ export function renderShell(root, {
         <option value="triangle" data-i18n="kind.triangle"></option>
       </select>
       <input type="color" id="ed-color" value="#ffffff" data-i18n-title="tip.place.color">
-      <input type="number" id="ed-size" value="0.5" min="0.01" step="0.1" data-i18n-title="tip.place.size">
+      <input type="number" id="ed-size" value="0.5" min="0.1" step="0.1" data-i18n-title="tip.place.size">
     </div>
     </div><!-- /vp-topbars -->
 
