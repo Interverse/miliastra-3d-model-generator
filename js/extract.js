@@ -1,6 +1,9 @@
 // Extract engine-agnostic SourceMesh data from a loaded three.js object.
-// Ignores animations, skeletons, cameras, lights — only mesh geometry,
-// base color material, and base color texture are used.
+// Ignores animations, cameras, lights — only mesh geometry, base color
+// material, and base color texture are used. The CURRENT pose is baked in:
+// skinned meshes deform on the GPU (the raw position attribute is the
+// bind/rest pose) and morph targets shift vertices, so both are applied to
+// the extracted positions — the converted output matches the viewport.
 import * as THREE from 'three';
 
 // Full fidelity up to 2048 so texture-edit write-backs are lossless for
@@ -79,6 +82,54 @@ function materialInfo(mat, cache) {
   return info;
 }
 
+// Bake the node's CURRENT pose into a fresh position array: morph target
+// influences first (in local space), then CPU skinning via three's own
+// applyBoneTransform (the same math the GPU shader and raycaster use).
+// Returns positions in the mesh's LOCAL space — matrixWorld is applied by
+// the conversion pipeline as usual.
+function bakePosedPositions(node, posAttr) {
+  const geo = node.geometry;
+  const count = posAttr.count;
+  const outArr = new Float32Array(count * 3);
+  const v = new THREE.Vector3();
+
+  const morphs = geo.morphAttributes?.position;
+  const infl = node.morphTargetInfluences;
+  const hasMorphs = !!(morphs && morphs.length && infl && infl.some((w) => w));
+  const relative = !!geo.morphTargetsRelative;
+
+  const skinned = !!(node.isSkinnedMesh && node.skeleton &&
+    geo.getAttribute('skinIndex') && geo.getAttribute('skinWeight'));
+
+  for (let i = 0; i < count; i++) {
+    v.fromBufferAttribute(posAttr, i);
+    if (hasMorphs) {
+      for (let m = 0; m < morphs.length; m++) {
+        const w = infl[m];
+        if (!w) continue;
+        const ma = morphs[m];
+        if (relative) {
+          v.x += ma.getX(i) * w;
+          v.y += ma.getY(i) * w;
+          v.z += ma.getZ(i) * w;
+        } else {
+          v.x += (ma.getX(i) - posAttr.getX(i)) * w;
+          v.y += (ma.getY(i) - posAttr.getY(i)) * w;
+          v.z += (ma.getZ(i) - posAttr.getZ(i)) * w;
+        }
+      }
+    }
+    if (skinned) {
+      if (node.applyBoneTransform) node.applyBoneTransform(i, v);
+      else node.boneTransform(i, v); // older three naming
+    }
+    outArr[i * 3] = v.x;
+    outArr[i * 3 + 1] = v.y;
+    outArr[i * 3 + 2] = v.z;
+  }
+  return outArr;
+}
+
 // Returns { meshes: SourceMesh[], triangleCount, meshCount,
 //           textures: [{ texture, material }] }  — textures pair each
 // extracted pixel buffer with the three.js material that uses it, so the
@@ -95,6 +146,8 @@ export function extractMeshes(root) {
     const geo = node.geometry;
     const posAttr = geo.getAttribute('position');
     if (!posAttr) return;
+    // bake the current pose (skinning + morph targets) once per mesh
+    const posedPositions = bakePosedPositions(node, posAttr);
     const uvAttr = geo.getAttribute('uv');
     const index = geo.getIndex();
     const groups = (geo.groups && geo.groups.length && Array.isArray(node.material))
@@ -117,7 +170,7 @@ export function extractMeshes(root) {
       }
       triangleCount += indices.length / 3;
       out.push({
-        positions: Float32Array.from(posAttr.array.slice(0, posAttr.count * 3)),
+        positions: posedPositions,
         indices,
         uvs: uvAttr ? Float32Array.from(uvAttr.array.slice(0, uvAttr.count * 2)) : null,
         matrixWorld: node.matrixWorld.toArray(),
