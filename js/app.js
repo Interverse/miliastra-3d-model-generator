@@ -1029,7 +1029,7 @@ export function initApp({ mode = "gia" } = {}) {
           }
           setActiveRecon(reconstructions.at(-1).id);
           renderReconList();
-          if ($("p-overlay").value === "wireframe") $("p-overlay").value = "both";
+          if ($("p-overlay").value === "wireframe") $("p-overlay").value = "solid";
           updateOverlays();
           updateDropHint();
           editor.onGenerated();
@@ -1274,7 +1274,7 @@ export function initApp({ mode = "gia" } = {}) {
     renderReconList();
     // when a result is displayed, show it Solid + Wireframe rather than the
     // wireframe-only overlay (an explicit Solid choice is respected)
-    if ($("p-overlay").value === "wireframe") $("p-overlay").value = "both";
+    if ($("p-overlay").value === "wireframe") $("p-overlay").value = "solid";
     updateOverlays();
     updateDropHint();
     // frame the new result once (no source model to anchor the camera)
