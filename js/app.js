@@ -1051,8 +1051,8 @@ export function initApp({ mode = "gia" } = {}) {
         $("wf-model").classList.toggle("active", !sprite);
         $("wf-sprite").classList.toggle("active", sprite);
         // each workflow shows its own source: the loaded model, or the
-        // selected sprite image
-        viewer.setModel(sprite ? spritePreviewObject : displayedObject);
+        // selected sprite image — without resetting the user's camera
+        viewer.setModel(sprite ? spritePreviewObject : displayedObject, true);
         updateDropHint();
         // Generate lives in the shared action bar in both workflows
         $("btn-generate").disabled = sprite
@@ -1246,10 +1246,12 @@ export function initApp({ mode = "gia" } = {}) {
       spritePreviewObject = plane;
     }
     if (spriteMode) {
-      viewer.setModel(spritePreviewObject);
+      // keepView: swapping the preview plane (frame stepping, playback,
+      // pivot edits) must NEVER touch the user's camera
+      viewer.setModel(spritePreviewObject, true);
       if (spritePreviewObject) {
         setModelToggle(true);
-        // frame the very first preview so it is actually in view
+        // frame only the very FIRST preview so it is actually in view
         if (hadNone && reconstructions.length === 0) viewer.frame();
       }
       updateDropHint();
