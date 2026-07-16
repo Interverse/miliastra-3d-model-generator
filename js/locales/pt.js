@@ -508,4 +508,8 @@ export default {
   "tip.ss.pivot": "Ponto da imagem (pixels, a partir do canto superior esquerdo) que se torna a origem do modelo — clique na pré-visualização para definir. Padrão: centro inferior",
   "ss.pivotall": "Aplicar pivô a todas as imagens",
   "tip.ss.pivotall": "Copia a posição relativa do pivô desta imagem para todas as outras",
+  "ss.optimize": "Otimizar imagens",
+  "tip.ss.optimize": "Recorta as bordas transparentes, detecta o tamanho real de pixel do sprite e reduz a escala — a cor majoritária vence em cada bloco",
+  "ss.optdone": "{n} imagens otimizadas",
+  "ss.optnone": "Nada para otimizar",
 };

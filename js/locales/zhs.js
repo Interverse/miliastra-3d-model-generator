@@ -508,4 +508,8 @@ export default {
   "tip.ss.pivot": "成为模型原点的图片位置（像素，自左上角起）——点击预览即可设置。默认：底部居中",
   "ss.pivotall": "将轴心应用到所有图片",
   "tip.ss.pivotall": "将此图片的相对轴心位置复制到所有其他图片",
+  "ss.optimize": "优化图片",
+  "tip.ss.optimize": "裁掉透明边缘，检测精灵的真实像素尺寸并缩小——每个像素块内取多数颜色",
+  "ss.optdone": "已优化 {n} 张图片",
+  "ss.optnone": "没有可优化的内容",
 };

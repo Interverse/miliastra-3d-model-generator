@@ -508,4 +508,8 @@ export default {
   "tip.ss.pivot": "Bildpunkt (Pixel, von oben links), der zum Modellursprung wird — zum Setzen in die Vorschau klicken. Standard: unten Mitte",
   "ss.pivotall": "Pivot auf alle Bilder anwenden",
   "tip.ss.pivotall": "Überträgt die relative Pivot-Position dieses Bildes auf alle anderen Bilder",
+  "ss.optimize": "Bilder optimieren",
+  "tip.ss.optimize": "Transparente Ränder abschneiden, die echte Pixelgröße des Sprites erkennen und herunterskalieren — pro Pixelblock gewinnt die Mehrheitsfarbe",
+  "ss.optdone": "{n} Bilder optimiert",
+  "ss.optnone": "Nichts zu optimieren",
 };

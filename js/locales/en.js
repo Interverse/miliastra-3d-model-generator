@@ -509,4 +509,8 @@ export default {
   "tip.ss.pivot": "Image point (pixels, from the top-left) that becomes the model origin — click the preview to set it. Default: bottom-center",
   "ss.pivotall": "Apply pivot to all images",
   "tip.ss.pivotall": "Copies this image's relative pivot position to every other image",
+  "ss.optimize": "Optimize images",
+  "tip.ss.optimize": "Trim transparent borders, detect the sprite's true pixel size, and downscale — the majority color wins inside each pixel block",
+  "ss.optdone": "Optimized {n} images",
+  "ss.optnone": "Nothing to optimize",
 };

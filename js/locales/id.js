@@ -508,4 +508,8 @@ export default {
   "tip.ss.pivot": "Titik gambar (piksel, dari kiri atas) yang menjadi titik asal model — klik pratinjau untuk mengaturnya. Bawaan: tengah bawah",
   "ss.pivotall": "Terapkan pivot ke semua gambar",
   "tip.ss.pivotall": "Menyalin posisi pivot relatif gambar ini ke semua gambar lain",
+  "ss.optimize": "Optimalkan gambar",
+  "tip.ss.optimize": "Memangkas tepi transparan, mendeteksi ukuran piksel sebenarnya dari sprite, lalu memperkecil — warna mayoritas menang di tiap blok piksel",
+  "ss.optdone": "{n} gambar dioptimalkan",
+  "ss.optnone": "Tidak ada yang perlu dioptimalkan",
 };

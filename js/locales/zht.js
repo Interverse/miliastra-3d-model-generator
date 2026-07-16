@@ -508,4 +508,8 @@ export default {
   "tip.ss.pivot": "成為模型原點的圖片位置（像素，自左上角起）——點擊預覽即可設定。預設：底部置中",
   "ss.pivotall": "將軸心套用到所有圖片",
   "tip.ss.pivotall": "將此圖片的相對軸心位置複製到所有其他圖片",
+  "ss.optimize": "最佳化圖片",
+  "tip.ss.optimize": "裁掉透明邊緣，偵測精靈的真實像素尺寸並縮小——每個像素區塊內取多數顏色",
+  "ss.optdone": "已最佳化 {n} 張圖片",
+  "ss.optnone": "沒有可最佳化的內容",
 };

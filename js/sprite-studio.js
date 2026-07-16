@@ -65,6 +65,281 @@ async function decodeGifFrames(file) {
   return out;
 }
 
+// ---------- image optimizer ----------
+// Web images of pixel sprites are usually upscaled (one logical pixel ≈
+// k×k screen pixels — k is often FRACTIONAL after web resizing), padded
+// with transparent margins, and dirtied by anti-aliased edges + noise.
+//
+// optimizeSpriteGroup(list) processes a set of SAME-SIZED frames (an
+// animation sequence) together: one shared trim rectangle (the union of
+// all frames' content) and one shared pixel grid, so every output frame
+// has identical dimensions and alignment — no animation jitter.
+//
+// Grid estimation: sub-pixel edge peaks (weighted centroids of the
+// edge-energy profile) are fitted with a continuous-period comb using
+// circular statistics — the concentration R(k) of peak positions mod k
+// is ≈1 exactly when the peaks lie on a lattice of spacing k, integer or
+// not. The largest k with R ≥ 0.9 on the combined evidence wins.
+// Reconstruction: one output pixel per grid cell, colored by the MODE
+// (majority bucket) of the cell's center region — isolated noisy pixels
+// and aliased borders are voted away.
+export function optimizeSpriteGroup(list) {
+  if (!list.length) return null;
+  const { width: w, height: h } = list[0];
+  if (list.some((p) => p.width !== w || p.height !== h)) return null;
+  const at = (x, y) => (y * w + x) * 4;
+
+  // ---- 1) shared trim: union of every frame's visible bounding box ----
+  let x0 = w, y0 = h, x1 = -1, y1 = -1;
+  for (const { data } of list) {
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (data[at(x, y) + 3] >= 8) {
+          if (x < x0) x0 = x;
+          if (x > x1) x1 = x;
+          if (y < y0) y0 = y;
+          if (y > y1) y1 = y;
+        }
+      }
+    }
+  }
+  if (x1 < 0) return null;
+  const tw = x1 - x0 + 1, th = y1 - y0 + 1;
+
+  // ---- 2) edge-energy profiles summed over ALL frames ----
+  const NOISE_FLOOR = 60; // per-pair distance below this is in-pixel noise
+  const Ex = new Float64Array(tw); // energy of the boundary LEFT of column x
+  const Ey = new Float64Array(th);
+  for (const { data } of list) {
+    const solid = (i) => data[i + 3] >= 128;
+    const dist = (i, j) => {
+      const a = solid(i), b = solid(j);
+      if (a !== b) return 400;
+      if (!a) return 0;
+      return Math.abs(data[i] - data[j]) + Math.abs(data[i + 1] - data[j + 1])
+        + Math.abs(data[i + 2] - data[j + 2]);
+    };
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0 + 1; x <= x1; x++) {
+        const d = dist(at(x - 1, y), at(x, y));
+        if (d > NOISE_FLOOR) Ex[x - x0] += d;
+      }
+    }
+    for (let x = x0; x <= x1; x++) {
+      for (let y = y0 + 1; y <= y1; y++) {
+        const d = dist(at(x, y - 1), at(x, y));
+        if (d > NOISE_FLOOR) Ey[y - y0] += d;
+      }
+    }
+  }
+
+  // ---- 3) continuous grid fit (per axis) ----
+  // Sub-pixel edge peaks: clusters of adjacent high-energy boundaries
+  // collapse to their weighted centroid (anti-aliasing splits one edge
+  // across two boundaries — the centroid recovers its true position).
+  const peaksOf = (E, len) => {
+    let maxE = 0;
+    for (let i = 1; i < len; i++) if (E[i] > maxE) maxE = E[i];
+    if (!maxE) return [];
+    const thr = 0.08 * maxE;
+    const peaks = [];
+    let i = 1;
+    while (i < len) {
+      if (E[i] > thr) {
+        let sw = 0, sp = 0;
+        while (i < len && E[i] > thr) { sw += E[i]; sp += i * E[i]; i++; }
+        peaks.push({ p: sp / sw, w: sw });
+      } else i++;
+    }
+    return peaks;
+  };
+  // Circular concentration of peak positions modulo k: R ≈ 1 ⇔ all peaks
+  // sit on a lattice with (possibly fractional) spacing k.
+  const ring = (peaks, k) => {
+    let sr = 0, si = 0, sw = 0;
+    for (const { p, w: wt } of peaks) {
+      const a = (2 * Math.PI * p) / k;
+      sr += wt * Math.cos(a);
+      si += wt * Math.sin(a);
+      sw += wt;
+    }
+    return {
+      R: sw ? Math.hypot(sr, si) / sw : 0,
+      phase: ((Math.atan2(si, sr) / (2 * Math.PI)) * k + k) % k,
+    };
+  };
+  const fitGrid = (peaks, len) => {
+    if (peaks.length < 3) return null;
+    const kMax = Math.min(64, len / 2);
+    // coarse multiplicative scan, then fine refinement around the LARGEST
+    // strong candidate (divisors of the true k also score 1 — skip them)
+    let best = null;
+    for (let k = 1.6; k <= kMax; k *= 1.012) {
+      const { R } = ring(peaks, k);
+      if (R >= 0.9 && (!best || k > best.k)) best = { k, R };
+    }
+    if (!best) return null;
+    // the acceptance threshold creates a plateau whose TOP edge overshoots
+    // the true period (especially with few peaks) — hunt the R maximum in
+    // a window reaching well below the plateau top
+    let refined = { k: best.k, R: ring(peaks, best.k).R };
+    for (let k = best.k / 1.2; k <= best.k * 1.05; k += best.k * 0.001) {
+      const r = ring(peaks, k);
+      if (r.R > refined.R + 1e-9) refined = { k, R: r.R };
+    }
+    const { phase } = ring(peaks, refined.k);
+    return { k: refined.k, phase, R: refined.R };
+  };
+  const px = peaksOf(Ex, tw);
+  const py = peaksOf(Ey, th);
+  let gx = fitGrid(px, tw);
+  let gy = fitGrid(py, th);
+  // axes of one sprite share the pixel size: harmonize near-equal results,
+  // and borrow the found axis when the other lacks evidence
+  if (gx && gy && Math.abs(gx.k - gy.k) < 0.12 * Math.max(gx.k, gy.k)) {
+    const k = (gx.k + gy.k) / 2;
+    gx = { k, phase: ring(px, k).phase };
+    gy = { k, phase: ring(py, k).phase };
+  } else if (gx && !gy) {
+    gy = { k: gx.k, phase: py.length ? ring(py, gx.k).phase : 0 };
+  } else if (gy && !gx) {
+    gx = { k: gy.k, phase: px.length ? ring(px, gy.k).phase : 0 };
+  }
+  const kx = gx?.k ?? 1, ky = gy?.k ?? 1;
+  const isNoop = kx === 1 && ky === 1
+    && x0 === 0 && y0 === 0 && tw === w && th === h;
+  if (isNoop) return null;
+
+  // ---- 4) grid cells (real-valued boundaries → integer sample spans) ----
+  const cellsOf = (g, len) => {
+    if (!g || g.k === 1) {
+      return Array.from({ length: len }, (_, i) => [i, i + 1]);
+    }
+    const { k, phase } = g;
+    let b = ((phase % k) + k) % k;
+    if (b > 0) b -= k; // leading partial cell
+    const out = [];
+    for (; b < len; b += k) {
+      const lo = Math.max(0, Math.round(b));
+      const hi = Math.min(len, Math.round(b + k));
+      // keep even thin edge cells — aliasing fringes are semi-transparent
+      // and vote themselves away; empty output borders are cropped later
+      if (hi - lo >= Math.max(1, k * 0.2)) out.push([lo, hi]);
+    }
+    return out;
+  };
+  const cx = cellsOf(gx, tw);
+  const cy = cellsOf(gy, th);
+  const w2 = cx.length, h2 = cy.length;
+  if (!w2 || !h2) return null;
+
+  // ---- 5) mode-color reconstruction per frame on the SHARED grid ----
+  const frames = list.map(({ data }) => {
+    const solid = (i) => data[i + 3] >= 128;
+    const cv = document.createElement('canvas');
+    cv.width = w2; cv.height = h2;
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    const img = ctx.createImageData(w2, h2);
+    const out = img.data;
+    const vote = (sx0, sx1, sy0, sy1, o) => {
+      let nOp = 0, nTr = 0;
+      const buckets = new Map(); // 4-bit/channel bucket -> [n, Σr, Σg, Σb]
+      for (let y = sy0; y < sy1; y++) {
+        for (let x = sx0; x < sx1; x++) {
+          const i = at(x, y);
+          if (!solid(i)) { nTr++; continue; }
+          nOp++;
+          const key = (data[i] >> 4) << 8 | (data[i + 1] >> 4) << 4 | (data[i + 2] >> 4);
+          let b = buckets.get(key);
+          if (!b) buckets.set(key, b = [0, 0, 0, 0]);
+          b[0]++; b[1] += data[i]; b[2] += data[i + 1]; b[3] += data[i + 2];
+        }
+      }
+      if (nOp === 0 && nTr === 0) return false;
+      if (nOp > nTr) {
+        let best = null;
+        for (const b of buckets.values()) if (!best || b[0] > best[0]) best = b;
+        out[o] = Math.round(best[1] / best[0]);
+        out[o + 1] = Math.round(best[2] / best[0]);
+        out[o + 2] = Math.round(best[3] / best[0]);
+        out[o + 3] = 255; // crisp pixel-art alpha
+      }
+      return true;
+    };
+    for (let by = 0; by < h2; by++) {
+      for (let bx = 0; bx < w2; bx++) {
+        const [gx0, gx1] = cx[bx];
+        const [gy0, gy1] = cy[by];
+        const o = (by * w2 + bx) * 4;
+        // centre sample first (aliased borders live at cell edges),
+        // full cell as fallback
+        const ix = gx1 - gx0 >= 4 ? Math.max(1, Math.floor((gx1 - gx0) * 0.25)) : 0;
+        const iy = gy1 - gy0 >= 4 ? Math.max(1, Math.floor((gy1 - gy0) * 0.25)) : 0;
+        if (!vote(x0 + gx0 + ix, x0 + gx1 - ix, y0 + gy0 + iy, y0 + gy1 - iy, o)) {
+          vote(x0 + gx0, x0 + gx1, y0 + gy0, y0 + gy1, o);
+        }
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return { width: w2, height: h2, data: out, canvas: cv };
+  });
+
+  // ---- 6) crop empty output borders (union across frames, so every
+  // frame keeps identical dimensions and alignment) ----
+  let ox0 = w2, oy0 = h2, ox1 = -1, oy1 = -1;
+  for (const f of frames) {
+    for (let y = 0; y < h2; y++) {
+      for (let x = 0; x < w2; x++) {
+        if (f.data[(y * w2 + x) * 4 + 3] > 0) {
+          if (x < ox0) ox0 = x;
+          if (x > ox1) ox1 = x;
+          if (y < oy0) oy0 = y;
+          if (y > oy1) oy1 = y;
+        }
+      }
+    }
+  }
+  if (ox1 < 0) return null;
+  const fw = ox1 - ox0 + 1, fh = oy1 - oy0 + 1;
+  const cropped = (fw === w2 && fh === h2) ? frames : frames.map((f) => {
+    const cv = document.createElement('canvas');
+    cv.width = fw; cv.height = fh;
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(f.canvas, ox0, oy0, fw, fh, 0, 0, fw, fh);
+    const img = ctx.getImageData(0, 0, fw, fh);
+    return { width: fw, height: fh, data: img.data, canvas: cv };
+  });
+
+  const kAvg = (kx + ky) / 2;
+  return {
+    frames: cropped,
+    k: kAvg,
+    kLabel: Math.abs(kAvg - Math.round(kAvg)) < 0.05
+      ? String(Math.round(kAvg))
+      : kAvg.toFixed(2),
+    trim: { x: x0, y: y0 },
+    // map a point in ORIGINAL image coordinates to output-pixel coordinates
+    // (used to carry custom pivots across the optimization)
+    mapPoint: (mx, my) => {
+      const lx = mx - x0, ly = my - y0;
+      const ix = cx.findIndex(([lo, hi]) => lx >= lo && lx < hi);
+      const iy = cy.findIndex(([lo, hi]) => ly >= lo && ly < hi);
+      const rx = ix >= 0 ? ix : Math.round((lx - cx[0][0]) / kx);
+      const ry = iy >= 0 ? iy : Math.round((ly - cy[0][0]) / ky);
+      return {
+        x: Math.max(0, Math.min(fw, rx - ox0)),
+        y: Math.max(0, Math.min(fh, ry - oy0)),
+      };
+    },
+  };
+}
+
+// single-image convenience wrapper (kept for API compatibility)
+export function optimizeSpritePixels(pixels) {
+  const r = optimizeSpriteGroup([pixels]);
+  return r && { pixels: r.frames[0], k: r.k, kLabel: r.kLabel, trim: r.trim, mapPoint: r.mapPoint };
+}
+
 export function setupSpriteStudio(host, opts = {}) {
   // ---------- state ----------
   const state = {
@@ -96,6 +371,9 @@ export function setupSpriteStudio(host, opts = {}) {
     </div>
     <button id="ss-pivot-all" class="secondary" hidden data-i18n="ss.pivotall"
       data-i18n-title="tip.ss.pivotall"></button>
+    <button id="ss-optimize" class="secondary" hidden data-i18n="ss.optimize"
+      data-i18n-title="tip.ss.optimize"></button>
+    <div class="hint2" id="ss-optinfo"></div>
     <div class="ss-divider"></div>
     <label class="row"><span data-i18n="ss.name"></span>
       <input id="ss-name" type="text" value="Sprite"></label>
@@ -305,6 +583,7 @@ export function setupSpriteStudio(host, opts = {}) {
     const asset = selectedAsset();
     $('ss-pivot-row').hidden = !asset;
     $('ss-pivot-all').hidden = !asset || state.assets.length < 2;
+    $('ss-optimize').hidden = !state.assets.length;
     if (asset) {
       $('ss-pivot-x').value = asset.pivot.x;
       $('ss-pivot-y').value = asset.pivot.y;
@@ -456,6 +735,7 @@ export function setupSpriteStudio(host, opts = {}) {
     nameTouched = false;
     state.settings.name = 'Sprite';
     $('ss-name').value = 'Sprite';
+    $('ss-optinfo').textContent = '';
     player.frame = 0;
     player.playing = false;
     addAnimation(T('ss.defaultanim', 'Idle'));
@@ -467,6 +747,81 @@ export function setupSpriteStudio(host, opts = {}) {
     if (host.hidden) return;
     const files = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith('image/'));
     if (files.length) { e.preventDefault(); importFiles(files); }
+  });
+
+  // ---------- pivot editing ----------
+  for (const [id, axis] of [['ss-pivot-x', 'x'], ['ss-pivot-y', 'y']]) {
+    $(id).addEventListener('input', () => {
+      const asset = selectedAsset();
+      const v = parseFloat($(id).value);
+      if (asset && isFinite(v)) { asset.pivot[axis] = v; asset.pivotTouched = true; renderPlayer(); }
+    });
+  }
+  // apply the SAME RELATIVE position to every image (sizes may differ)
+  $('ss-pivot-all').addEventListener('click', () => {
+    const src = selectedAsset();
+    if (!src) return;
+    const fx = src.pivot.x / src.pixels.width;
+    const fy = src.pivot.y / src.pixels.height;
+    for (const asset of state.assets) {
+      if (asset === src) continue;
+      asset.pivot.x = Math.round(fx * asset.pixels.width);
+      asset.pivot.y = Math.round(fy * asset.pixels.height);
+      asset.pivotTouched = true;
+    }
+    renderPlayer();
+  });
+  // clicking the preview sets the pivot of the shown image
+  cvs.addEventListener('pointerdown', (ev) => {
+    const asset = selectedAsset();
+    if (!asset) return;
+    const r = cvs.getBoundingClientRect();
+    const sx = cvs.width / r.width, sy = cvs.height / r.height;
+    const { k, ox, oy } = previewLayout(asset);
+    asset.pivot.x = Math.round(((ev.clientX - r.left) * sx - ox) / k);
+    asset.pivot.y = Math.round(((ev.clientY - r.top) * sy - oy) / k);
+    asset.pivotTouched = true;
+    renderPlayer();
+  });
+
+  // ---------- optimize images (trim + true-pixel downscale) ----------
+  // Same-sized images (animation sequences, extracted GIF frames) are
+  // processed as ONE group: a shared trim rectangle and a shared pixel
+  // grid keep every frame's dimensions and alignment identical.
+  $('ss-optimize').addEventListener('click', () => {
+    const groups = new Map();
+    for (const asset of state.assets) {
+      const key = `${asset.pixels.width}x${asset.pixels.height}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(asset);
+    }
+    const lines = [];
+    let n = 0;
+    for (const group of groups.values()) {
+      const res = optimizeSpriteGroup(group.map((a) => a.pixels));
+      if (!res) continue;
+      group.forEach((asset, i) => {
+        const { width: ow, height: oh } = asset.pixels;
+        const out = res.frames[i];
+        // custom pivots follow the image through trim + grid mapping;
+        // untouched pivots re-default to the new bottom-center
+        asset.pivot = asset.pivotTouched
+          ? res.mapPoint(asset.pivot.x, asset.pivot.y)
+          : { x: Math.round(out.width / 2), y: out.height };
+        asset.pixels = out;
+        results.delete(asset.id); // stale conversion
+        n++;
+        if (lines.length < 3) {
+          lines.push(`${asset.name}: ${ow}×${oh} → ${out.width}×${out.height}` +
+            (res.k > 1 ? ` (×${res.kLabel})` : ''));
+        }
+      });
+    }
+    $('ss-optinfo').textContent = n
+      ? `${T('ss.optdone', 'Optimized {n} images').split('{n}').join(String(n))} — ${lines.join(' · ')}`
+      : T('ss.optnone', 'Nothing to optimize');
+    lastPreviewKey = ''; // pixels changed under the same asset id
+    renderAll();
   });
 
   // ---------- animator wiring ----------
@@ -526,39 +881,6 @@ export function setupSpriteStudio(host, opts = {}) {
   });
   $('ss-help').addEventListener('click', () => openAnimHelp());
 
-  // ---------- pivot editing ----------
-  for (const [id, axis] of [['ss-pivot-x', 'x'], ['ss-pivot-y', 'y']]) {
-    $(id).addEventListener('input', () => {
-      const asset = selectedAsset();
-      const v = parseFloat($(id).value);
-      if (asset && isFinite(v)) { asset.pivot[axis] = v; renderPlayer(); }
-    });
-  }
-  // apply the SAME RELATIVE position to every image (sizes may differ)
-  $('ss-pivot-all').addEventListener('click', () => {
-    const src = selectedAsset();
-    if (!src) return;
-    const fx = src.pivot.x / src.pixels.width;
-    const fy = src.pivot.y / src.pixels.height;
-    for (const asset of state.assets) {
-      if (asset === src) continue;
-      asset.pivot.x = Math.round(fx * asset.pixels.width);
-      asset.pivot.y = Math.round(fy * asset.pixels.height);
-    }
-    renderPlayer();
-  });
-  // clicking the preview sets the pivot of the shown image
-  cvs.addEventListener('pointerdown', (ev) => {
-    const asset = selectedAsset();
-    if (!asset) return;
-    const r = cvs.getBoundingClientRect();
-    const sx = cvs.width / r.width, sy = cvs.height / r.height;
-    const { k, ox, oy } = previewLayout(asset);
-    asset.pivot.x = Math.round(((ev.clientX - r.left) * sx - ox) / k);
-    asset.pivot.y = Math.round(((ev.clientY - r.top) * sy - oy) / k);
-    renderPlayer();
-  });
-
   // player controls
   $('ss-play').addEventListener('click', () => { player.playing = !player.playing; renderPlayer(); });
   $('ss-restart').addEventListener('click', () => { player.frame = 0; player.acc = 0; renderPlayer(); renderFrames(); });
@@ -595,7 +917,7 @@ export function setupSpriteStudio(host, opts = {}) {
       if (ev.data.jobId !== jobId) return;
       worker.removeEventListener('message', onMsg);
       if (!ev.data.ok) reject(new Error(ev.data.error ?? 'conversion failed'));
-      else resolve(ev.data); // { decorations, stats, ... }
+      else resolve(ev.data); // { decorations, stats, positions, colors, owners }
     };
     worker.addEventListener('message', onMsg);
     worker.postMessage({

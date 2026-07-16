@@ -508,4 +508,8 @@ export default {
   "tip.ss.pivot": "Modelin başlangıç noktası olacak görüntü noktası (sol üstten piksel) — ayarlamak için önizlemeye tıklayın. Varsayılan: alt orta",
   "ss.pivotall": "Pivotu tüm görsellere uygula",
   "tip.ss.pivotall": "Bu görselin göreli pivot konumunu diğer tüm görsellere kopyalar",
+  "ss.optimize": "Görselleri iyileştir",
+  "tip.ss.optimize": "Saydam kenarları kırpar, sprite'ın gerçek piksel boyutunu algılar ve küçültür — her piksel bloğunda çoğunluk rengi kazanır",
+  "ss.optdone": "{n} görsel iyileştirildi",
+  "ss.optnone": "İyileştirilecek bir şey yok",
 };

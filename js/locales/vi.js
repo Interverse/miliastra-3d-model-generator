@@ -508,4 +508,8 @@ export default {
   "tip.ss.pivot": "Điểm trên ảnh (pixel, từ góc trên bên trái) sẽ trở thành gốc tọa độ của mô hình — nhấp vào bản xem trước để đặt. Mặc định: giữa cạnh dưới",
   "ss.pivotall": "Áp dụng điểm neo cho tất cả hình ảnh",
   "tip.ss.pivotall": "Sao chép vị trí điểm neo tương đối của ảnh này sang tất cả ảnh khác",
+  "ss.optimize": "Tối ưu hình ảnh",
+  "tip.ss.optimize": "Cắt viền trong suốt, phát hiện kích thước pixel thật của sprite rồi thu nhỏ — màu chiếm đa số thắng trong mỗi khối pixel",
+  "ss.optdone": "Đã tối ưu {n} hình ảnh",
+  "ss.optnone": "Không có gì để tối ưu",
 };
