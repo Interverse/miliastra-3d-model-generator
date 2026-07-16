@@ -1028,6 +1028,7 @@ export function initApp({ mode = "gia" } = {}) {
           renderReconList();
           if ($("p-overlay").value === "wireframe") $("p-overlay").value = "both";
           updateOverlays();
+          updateDropHint();
           editor.onGenerated();
           if (currentObject && $("tb-model").classList.contains("pressed")) {
             setModelToggle(false);
@@ -1199,6 +1200,12 @@ export function initApp({ mode = "gia" } = {}) {
     return `${base}${e.extra ?? ""} #${e.id}`;
   }
 
+  // "Load a model to begin" only makes sense while the viewport is truly
+  // empty: no source model AND no generated reconstructions.
+  function updateDropHint() {
+    $("drop-hint").hidden = !!currentObject || reconstructions.length > 0;
+  }
+
   // Shared tail of every generation (worker results AND sprite-studio
   // results): register the reconstruction and surface it in the viewport.
   function addReconstruction(kind, extra, msg, params) {
@@ -1217,6 +1224,7 @@ export function initApp({ mode = "gia" } = {}) {
     // wireframe-only overlay (an explicit Solid choice is respected)
     if ($("p-overlay").value === "wireframe") $("p-overlay").value = "both";
     updateOverlays();
+    updateDropHint();
     // frame the new result once (no source model to anchor the camera)
     if (!currentObject) viewer.frame();
     editor.onGenerated();
@@ -1301,6 +1309,7 @@ export function initApp({ mode = "gia" } = {}) {
         }
         renderReconList();
         updateOverlays();
+        updateDropHint();
       });
       row.append(vis, act, label, count, del);
       el.append(row);
@@ -1312,6 +1321,7 @@ export function initApp({ mode = "gia" } = {}) {
     setActiveRecon(null);
     renderReconList();
     updateOverlays();
+    updateDropHint();
   }
 
   function renderModelInfo() {

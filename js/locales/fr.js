@@ -503,4 +503,5 @@ export default {
   "animhelp.title": "Tutoriel du graphe de nœuds",
   "ss.genall": "Les {n} modèles ont été générés",
   "sheet.saveanim": "Enregistrer les découpes comme nouvelle animation",
+  "ss.err.noimages": "Ajoutez au moins une image",
 };

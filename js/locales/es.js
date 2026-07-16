@@ -503,4 +503,5 @@ export default {
   "animhelp.title": "Tutorial del grafo de nodos",
   "ss.genall": "Se generaron los {n} modelos",
   "sheet.saveanim": "Guardar cortes como nueva animación",
+  "ss.err.noimages": "Añade al menos una imagen",
 };

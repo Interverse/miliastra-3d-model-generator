@@ -503,4 +503,5 @@ export default {
   "animhelp.title": "ノードグラフチュートリアル",
   "ss.genall": "{n} 個のモデルをすべて生成しました",
   "sheet.saveanim": "スライスを新しいアニメーションとして保存",
+  "ss.err.noimages": "画像を 1 枚以上追加してください",
 };

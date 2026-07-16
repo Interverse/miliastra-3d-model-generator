@@ -503,4 +503,5 @@ export default {
   "animhelp.title": "Nodegraph-Tutorial",
   "ss.genall": "Alle {n} Modelle generiert",
   "sheet.saveanim": "Zuschnitte als neue Animation speichern",
+  "ss.err.noimages": "Mindestens ein Bild hinzufügen",
 };

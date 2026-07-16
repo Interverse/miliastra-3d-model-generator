@@ -503,4 +503,5 @@ export default {
   "animhelp.title": "Hướng dẫn đồ thị nút",
   "ss.genall": "Đã tạo tất cả {n} mô hình",
   "sheet.saveanim": "Lưu các lát cắt thành hoạt ảnh mới",
+  "ss.err.noimages": "Thêm ít nhất một hình ảnh",
 };

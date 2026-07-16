@@ -503,4 +503,5 @@ export default {
   "animhelp.title": "節點圖教學",
   "ss.genall": "已產生全部 {n} 個模型",
   "sheet.saveanim": "將切片儲存為新動畫",
+  "ss.err.noimages": "請至少新增一張圖片",
 };

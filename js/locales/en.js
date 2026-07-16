@@ -504,4 +504,5 @@ export default {
   "animhelp.title": "Node Graph Tutorial",
   "ss.genall": "Generated all {n} models",
   "sheet.saveanim": "Save slices as new animation",
+  "ss.err.noimages": "Add at least one image",
 };

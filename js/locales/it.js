@@ -503,4 +503,5 @@ export default {
   "animhelp.title": "Tutorial del grafo di nodi",
   "ss.genall": "Generati tutti i {n} modelli",
   "sheet.saveanim": "Salva i ritagli come nuova animazione",
+  "ss.err.noimages": "Aggiungi almeno un'immagine",
 };

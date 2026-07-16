@@ -1260,9 +1260,12 @@ button.small {
 .ss-error {
   color: #e07a6e;
   font-size: 11px;
-  min-height: 15px;
   margin-top: 6px;
   overflow-wrap: break-word;
+}
+/* no reserved space when there is nothing to report */
+.ss-error:empty {
+  display: none;
 }
 
 /* preview player */

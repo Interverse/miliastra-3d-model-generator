@@ -503,4 +503,5 @@ export default {
   "animhelp.title": "Tutorial graf node",
   "ss.genall": "Semua {n} model berhasil dibuat",
   "sheet.saveanim": "Simpan potongan sebagai animasi baru",
+  "ss.err.noimages": "Tambahkan minimal satu gambar",
 };

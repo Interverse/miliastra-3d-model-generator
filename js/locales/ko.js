@@ -503,4 +503,5 @@ export default {
   "animhelp.title": "노드 그래프 튜토리얼",
   "ss.genall": "{n}개 모델을 모두 생성했습니다",
   "sheet.saveanim": "슬라이스를 새 애니메이션으로 저장",
+  "ss.err.noimages": "이미지를 하나 이상 추가하세요",
 };

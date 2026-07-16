@@ -503,4 +503,5 @@ export default {
   "animhelp.title": "Düğüm grafiği eğitimi",
   "ss.genall": "Toplam {n} model oluşturuldu",
   "sheet.saveanim": "Dilimleri yeni animasyon olarak kaydet",
+  "ss.err.noimages": "En az bir görsel ekleyin",
 };

@@ -126,6 +126,7 @@ export function setupSpriteStudio(host, opts = {}) {
       <button id="ss-timing-toggle" class="mini" data-i18n-title="ss.timingtoggle">⇄</button></label>
     <label class="row" data-i18n-title="tip.ss.start"><span data-i18n="ss.start"></span>
       <input id="ss-start" type="checkbox"></label>
+    <div class="ss-error" id="ss-anim-error"></div>
     <div class="subhead" data-i18n="ss.preview"></div>
     <canvas id="ss-canvas" width="300" height="200"></canvas>
     <div class="btn-strip">
@@ -159,25 +160,37 @@ export function setupSpriteStudio(host, opts = {}) {
   addAnimation(T('ss.defaultanim', 'Idle'));
 
   // ---------- validation ----------
+  // Image-level problems (nothing imported, missing name) surface in the
+  // Images panel; animation-specific problems surface in the (optional)
+  // Animation panel so the primary workflow never talks about animations.
   let valid = false;
   const validate = () => {
-    const errs = [];
+    const imgErrs = [];
+    const animErrs = [];
     const names = new Set();
-    if (!$('ss-name').value.trim()) errs.push(T('ss.err.name', 'Sprite name is required'));
+    if (!$('ss-name').value.trim()) imgErrs.push(T('ss.err.name', 'Sprite name is required'));
+    const noImages = state.assets.length === 0;
+    if (noImages) imgErrs.push(T('ss.err.noimages', 'Add at least one image'));
     for (const a of state.animations) {
       const nm = a.name.trim();
-      if (!nm) errs.push(T('ss.err.animname', 'Animation names cannot be empty'));
-      else if (names.has(nm.toLowerCase())) errs.push(`${T('ss.err.dup', 'Duplicate animation name:')} ${nm}`);
+      if (!nm) animErrs.push(T('ss.err.animname', 'Animation names cannot be empty'));
+      else if (names.has(nm.toLowerCase())) animErrs.push(`${T('ss.err.dup', 'Duplicate animation name:')} ${nm}`);
       names.add(nm.toLowerCase());
-      if (!(a.spf > 0) || !isFinite(a.spf)) errs.push(`${nm}: ${T('ss.err.timing', 'invalid FPS / seconds-per-frame')}`);
-      if (!a.frames.length) errs.push(`${nm}: ${T('ss.err.empty', 'animation has no frames')}`);
+      if (!(a.spf > 0) || !isFinite(a.spf)) animErrs.push(`${nm}: ${T('ss.err.timing', 'invalid FPS / seconds-per-frame')}`);
+      // an empty animation is only an ANIMATION problem when images exist —
+      // with no images at all, the Images panel message already covers it
+      if (!a.frames.length && !noImages) animErrs.push(`${nm}: ${T('ss.err.empty', 'animation has no frames')}`);
       for (const fid of a.frames) {
-        if (!state.assets.find((s) => s.id === fid)) errs.push(`${nm}: ${T('ss.err.missing', 'missing frame image')}`);
+        if (!state.assets.find((s) => s.id === fid)) animErrs.push(`${nm}: ${T('ss.err.missing', 'missing frame image')}`);
       }
     }
-    if (!state.animations.length) errs.push(T('ss.err.noanims', 'Add at least one animation'));
-    $('ss-error').textContent = errs.slice(0, 3).join(' · ');
-    valid = errs.length === 0;
+    if (!state.animations.length) animErrs.push(T('ss.err.noanims', 'Add at least one animation'));
+    $('ss-error').textContent = imgErrs.slice(0, 3).join(' · ');
+    $('ss-anim-error').textContent = animErrs.slice(0, 3).join(' · ');
+    // empty animations still block generation even though the message
+    // lives in the Images panel ("add at least one image")
+    const framesMissing = state.animations.some((a) => !a.frames.length);
+    valid = imgErrs.length === 0 && animErrs.length === 0 && !framesMissing;
     opts.onValidity?.(valid);
     // multiple images → animated export → auto-assemble does not apply
     opts.onAnimatedChange?.(isAnimated());

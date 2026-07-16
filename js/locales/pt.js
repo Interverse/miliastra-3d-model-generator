@@ -503,4 +503,5 @@ export default {
   "animhelp.title": "Tutorial do grafo de nós",
   "ss.genall": "Todos os {n} modelos foram gerados",
   "sheet.saveanim": "Salvar fatias como nova animação",
+  "ss.err.noimages": "Adicione pelo menos uma imagem",
 };
