@@ -963,6 +963,46 @@ export function setupSpriteStudio(host, opts = {}) {
 
   let lastExport = null; // { bytes, filename }
 
+  // Build the .gia bytes from the CACHED conversions and the CURRENT
+  // settings (collision / auto-assemble are read fresh every time, so
+  // toggling them after Generate still affects the next Download).
+  const buildExport = () => {
+    if (!state.animations.length) return lastExport;
+    // every referenced frame must have a cached conversion
+    for (const a of state.animations) {
+      for (const fid of a.frames) if (!results.has(fid)) return lastExport;
+    }
+    const name = state.settings.name.trim().replace(/\s+/g, '_') || 'Sprite';
+    const collision = opts.getCollision?.() ?? true;
+    if (isAnimated()) {
+      const animations = state.animations.map((a) => ({
+        name: a.name.trim(),
+        secondsPerFrame: a.spf,
+        oneShot: !a.loop,
+        frames: a.frames.map((fid) =>
+          splitIntoModels('f', results.get(fid).decorations, MAX_DECORATIONS_PER_MODEL)
+            .map((m) => ({ decorations: m.decorations }))),
+      }));
+      const startName = state.animations.find((a) => a.id === state.startingId)?.name
+        ?? state.animations[0].name;
+      const bytes = buildAnimatedGia({
+        name, animations, startingAnimation: startName.trim(), collision,
+      });
+      lastExport = { bytes, filename: `${name}_Animated.gia` };
+    } else {
+      // single image → plain static sprite .gia (auto-assemble follows
+      // the right-sidebar checkbox, exactly like the model workflow)
+      const decs = results.get(state.animations[0].frames[0]).decorations;
+      const bytes = buildGia({
+        models: splitIntoModels(name, decs, MAX_DECORATIONS_PER_MODEL),
+        exportName: name, collision,
+        autoAssemble: opts.getAutoAssemble?.() ?? false,
+      });
+      lastExport = { bytes, filename: `${name}.gia` };
+    }
+    return lastExport;
+  };
+
   // Full generation pass — driven by the app's Generate button.
   const generate = async () => {
     if (!validate()) return null;
@@ -981,35 +1021,7 @@ export function setupSpriteStudio(host, opts = {}) {
         done++;
         opts.onProgress?.(done / used.size);
       }
-      const name = state.settings.name.trim().replace(/\s+/g, '_') || 'Sprite';
-      const collision = opts.getCollision?.() ?? true;
-      let bytes;
-      if (isAnimated()) {
-        const animations = state.animations.map((a) => ({
-          name: a.name.trim(),
-          secondsPerFrame: a.spf,
-          oneShot: !a.loop,
-          frames: a.frames.map((fid) =>
-            splitIntoModels('f', results.get(fid).decorations, MAX_DECORATIONS_PER_MODEL)
-              .map((m) => ({ decorations: m.decorations }))),
-        }));
-        const startName = state.animations.find((a) => a.id === state.startingId)?.name
-          ?? state.animations[0].name;
-        bytes = buildAnimatedGia({
-          name, animations, startingAnimation: startName.trim(), collision,
-        });
-        lastExport = { bytes, filename: `${name}_Animated.gia` };
-      } else {
-        // single image → plain static sprite .gia (auto-assemble follows
-        // the right-sidebar checkbox, exactly like the model workflow)
-        const decs = results.get(state.animations[0].frames[0]).decorations;
-        bytes = buildGia({
-          models: splitIntoModels(name, decs, MAX_DECORATIONS_PER_MODEL),
-          exportName: name, collision,
-          autoAssemble: opts.getAutoAssemble?.() ?? false,
-        });
-        lastExport = { bytes, filename: `${name}.gia` };
-      }
+      buildExport();
       renderFrames();
       // Every converted frame becomes a scene entry. Each item carries the
       // FULL worker message (decorations + positions/colors/owners preview
@@ -1034,7 +1046,9 @@ export function setupSpriteStudio(host, opts = {}) {
     importFiles,
     refresh: renderAll,
     generate,
-    getExport: () => lastExport,
+    // rebuilt on demand so collision/auto-assemble reflect the checkboxes
+    // at DOWNLOAD time, exactly like the model workflow
+    getExport: () => buildExport(),
     isValid: () => valid,
   };
 }
