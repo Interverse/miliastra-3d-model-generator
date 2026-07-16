@@ -347,8 +347,9 @@ export function setupSpriteStudio(host, opts = {}) {
     }
     syncPivotUI();
     // the viewport mirrors the selected image (only on actual changes —
-    // renderPlayer runs every animation tick)
-    const key = `${asset?.id ?? ''}|${state.settings.pixelSize}`;
+    // renderPlayer runs every animation tick); pivot is part of the key so
+    // pivot edits reposition the viewport preview too
+    const key = `${asset?.id ?? ''}|${state.settings.pixelSize}|${asset?.pivot.x ?? 0},${asset?.pivot.y ?? 0}`;
     if (key !== lastPreviewKey) {
       lastPreviewKey = key;
       opts.onImageSelected?.(asset ?? null);

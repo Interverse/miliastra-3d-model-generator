@@ -1238,7 +1238,11 @@ export function initApp({ mode = "gia" } = {}) {
           side: THREE.DoubleSide,
         }),
       );
-      plane.position.y = (h * ps) / 2;
+      // same shift the generated output gets: the image's pivot point
+      // (default bottom-center) sits at the origin
+      const p = asset.pivot ?? { x: w / 2, y: h };
+      plane.position.x = -(p.x - w / 2) * ps;
+      plane.position.y = (h * ps) / 2 - (h - p.y) * ps;
       spritePreviewObject = plane;
     }
     if (spriteMode) {
