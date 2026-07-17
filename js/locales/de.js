@@ -512,4 +512,9 @@ export default {
   "tip.ss.optimize": "Transparente Ränder abschneiden, die echte Pixelgröße des Sprites erkennen und herunterskalieren — pro Pixelblock gewinnt die Mehrheitsfarbe",
   "ss.optdone": "{n} Bilder optimiert",
   "ss.optnone": "Nichts zu optimieren",
+  "ss.optpx": "Pixelgröße überschreiben (px)",
+  "tip.ss.optpx": "Quellpixel pro Sprite-Pixel für die Bildoptimierung — 0 erkennt automatisch; bei mehrdeutiger Erkennung manuell setzen",
+  "ss.optreset": "↺ Optimierung zurücksetzen",
+  "tip.ss.optreset": "Stellt alle Bilder im ursprünglich importierten Zustand wieder her und macht die Bildoptimierung rückgängig",
+  "t.cancelled": "Konvertierung abgebrochen",
 };

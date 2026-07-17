@@ -512,4 +512,9 @@ export default {
   "tip.ss.optimize": "Saydam kenarları kırpar, sprite'ın gerçek piksel boyutunu algılar ve küçültür — her piksel bloğunda çoğunluk rengi kazanır",
   "ss.optdone": "{n} görsel iyileştirildi",
   "ss.optnone": "İyileştirilecek bir şey yok",
+  "ss.optpx": "Piksel boyutunu elle ayarla (px)",
+  "tip.ss.optpx": "Görsel iyileştirmede sprite pikseli başına kaynak piksel sayısı — 0 otomatik algılar; algılama belirsizse elle ayarlayın",
+  "ss.optreset": "↺ İyileştirmeyi sıfırla",
+  "tip.ss.optreset": "Tüm görselleri içe aktarıldıkları özgün duruma döndürür ve iyileştirmeyi geri alır",
+  "t.cancelled": "Dönüştürme iptal edildi",
 };

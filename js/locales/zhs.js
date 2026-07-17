@@ -512,4 +512,9 @@ export default {
   "tip.ss.optimize": "裁掉透明边缘，检测精灵的真实像素尺寸并缩小——每个像素块内取多数颜色",
   "ss.optdone": "已优化 {n} 张图片",
   "ss.optnone": "没有可优化的内容",
+  "ss.optpx": "手动指定像素尺寸 (px)",
+  "tip.ss.optpx": "优化图片时每个精灵像素对应的源像素数——0 为自动检测；检测结果不确定时可手动指定",
+  "ss.optreset": "↺ 重置优化",
+  "tip.ss.optreset": "将所有图片恢复到导入时的原始状态，撤销图片优化",
+  "t.cancelled": "已取消转换",
 };

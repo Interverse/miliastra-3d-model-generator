@@ -512,4 +512,9 @@ export default {
   "tip.ss.optimize": "Ritaglia i bordi trasparenti, rileva la dimensione reale dei pixel dello sprite e riduce la scala — in ogni blocco vince il colore di maggioranza",
   "ss.optdone": "{n} immagini ottimizzate",
   "ss.optnone": "Niente da ottimizzare",
+  "ss.optpx": "Forza dimensione pixel (px)",
+  "tip.ss.optpx": "Pixel sorgente per pixel dello sprite nell'ottimizzazione — 0 rileva automaticamente; impostalo a mano se il rilevamento è ambiguo",
+  "ss.optreset": "↺ Ripristina ottimizzazione",
+  "tip.ss.optreset": "Riporta tutte le immagini allo stato originale importato, annullando l'ottimizzazione",
+  "t.cancelled": "Conversione annullata",
 };

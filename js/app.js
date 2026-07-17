@@ -96,9 +96,17 @@ export function initApp({ mode = "gia" } = {}) {
       t.material.map.needsUpdate = true;
     }
   });
-  const worker = new Worker(new URL("./convert-worker.js", import.meta.url), {
-    type: "module",
-  });
+  // Conversion worker — respawnable so Cancel can hard-terminate a running
+  // job (the pipeline inside the worker is synchronous; terminate() is the
+  // only way to stop it immediately) and the next Generate starts fresh.
+  function spawnWorker() {
+    const w = new Worker(new URL("./convert-worker.js", import.meta.url), {
+      type: "module",
+    });
+    w.onmessage = (ev) => onWorkerMessage(ev);
+    return w;
+  }
+  let worker = spawnWorker();
 
   // Interactive editor (tools, selection, gizmos, history, optimization) —
   // see js/editor/. It mutates the active reconstruction's decorations and
@@ -1145,6 +1153,37 @@ export function initApp({ mode = "gia" } = {}) {
     $("progress-bar").style.width = "0";
   }
 
+  // While a conversion runs, Generate is replaced by Cancel.
+  function setGenerating(on) {
+    $("btn-generate").hidden = on;
+    const c = $("btn-cancel");
+    if (c) c.hidden = !on;
+  }
+
+  // Hard-stop the current generation: the pipeline is synchronous inside
+  // its worker, so termination is immediate; partial output is discarded
+  // (results only ever land through a completed worker message).
+  function cancelGeneration() {
+    if (!busy) return;
+    if (spriteMode) {
+      spriteStudio?.cancel(); // rejects the studio's in-flight conversion
+    } else {
+      jobId++; // any late message from the old worker is ignored
+      worker.terminate();
+      worker = spawnWorker();
+    }
+    busy = false;
+    setGenerating(false);
+    $("btn-generate").disabled = spriteMode
+      ? !spriteStudio?.isValid()
+      : !extracted && !spriteImageName;
+    $("btn-generate").textContent = t("btn.generate");
+    endProgress();
+    showToast(t("t.cancelled"));
+  }
+
+  $("btn-cancel")?.addEventListener("click", cancelGeneration);
+
   $("btn-generate").addEventListener("click", async () => {
     if (busy) return;
     // Sprite workflow: the shared Generate button drives the studio
@@ -1153,13 +1192,15 @@ export function initApp({ mode = "gia" } = {}) {
       busy = true;
       $("btn-generate").disabled = true;
       $("btn-generate").textContent = t("btn.converting");
+      setGenerating(true);
       beginProgress();
       try {
         await spriteStudio.generate(); // onGenerated adds the reconstructions
       } catch {
-        /* error already shown inline by the studio */
+        /* cancelled, or error already shown inline by the studio */
       } finally {
         busy = false;
+        setGenerating(false);
         $("btn-generate").disabled = !spriteStudio.isValid();
         $("btn-generate").textContent = t("btn.generate");
         endProgress();
@@ -1170,6 +1211,7 @@ export function initApp({ mode = "gia" } = {}) {
     busy = true;
     $("btn-generate").disabled = true;
     $("btn-generate").textContent = t("btn.converting");
+    setGenerating(true);
     beginProgress();
     const params = readParams();
     lastParams = params;
@@ -1287,10 +1329,11 @@ export function initApp({ mode = "gia" } = {}) {
     }
   }
 
-  worker.onmessage = (ev) => {
+  function onWorkerMessage(ev) {
     const msg = ev.data;
     if (msg.jobId !== jobId) return;
     busy = false;
+    setGenerating(false);
     $("btn-generate").disabled = false;
     $("btn-generate").textContent = t("btn.generate");
     endProgress();

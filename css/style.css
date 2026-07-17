@@ -404,6 +404,12 @@ button:disabled {
   color: #6b7482;
   cursor: not-allowed;
 }
+#btn-cancel {
+  background: #a33c3c;
+}
+#btn-cancel:hover:not(:disabled) {
+  background: #b84a4a;
+}
 #btn-download {
   background: #22a06b;
 }

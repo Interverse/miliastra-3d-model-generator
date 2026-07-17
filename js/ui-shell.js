@@ -283,6 +283,7 @@ export function renderShell(root, {
 
     <div id="action-bar">
       <button id="btn-generate" disabled data-i18n="btn.generate"></button>
+      <button id="btn-cancel" hidden data-i18n="btn.cancel"></button>
       <div id="progress" hidden><div id="progress-bar"></div></div>
     </div>
     <div class="resize-handle" id="resize-left"></div>

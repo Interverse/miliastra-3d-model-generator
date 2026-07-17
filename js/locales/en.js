@@ -513,4 +513,9 @@ export default {
   "tip.ss.optimize": "Trim transparent borders, detect the sprite's true pixel size, and downscale — the majority color wins inside each pixel block",
   "ss.optdone": "Optimized {n} images",
   "ss.optnone": "Nothing to optimize",
+  "ss.optpx": "Pixel size override (px)",
+  "tip.ss.optpx": "Source pixels per sprite pixel for Optimize Images — 0 detects it automatically; set it manually when detection is ambiguous",
+  "ss.optreset": "↺ Reset optimization",
+  "tip.ss.optreset": "Restore every image to its original imported state, undoing Optimize Images",
+  "t.cancelled": "Conversion cancelled",
 };

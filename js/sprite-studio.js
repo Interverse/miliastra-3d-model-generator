@@ -83,7 +83,7 @@ async function decodeGifFrames(file) {
 // Reconstruction: one output pixel per grid cell, colored by the MODE
 // (majority bucket) of the cell's center region — isolated noisy pixels
 // and aliased borders are voted away.
-export function optimizeSpriteGroup(list) {
+export function optimizeSpriteGroup(list, options = {}) {
   if (!list.length) return null;
   const { width: w, height: h } = list[0];
   if (list.some((p) => p.width !== w || p.height !== h)) return null;
@@ -168,6 +168,28 @@ export function optimizeSpriteGroup(list) {
       phase: ((Math.atan2(si, sr) / (2 * Math.PI)) * k + k) % k,
     };
   };
+  // ---- grid cells (real-valued boundaries → integer sample spans) ----
+  // NOTE: per-boundary "elastic" snapping to edge peaks was tried and
+  // REJECTED — under heavy blur peaks merge and mislead the snap, costing
+  // more accuracy than the fractional-k drift it was meant to absorb.
+  const cellsOf = (g, len) => {
+    if (!g || g.k === 1) {
+      return Array.from({ length: len }, (_, i) => [i, i + 1]);
+    }
+    const { k, phase } = g;
+    let b = ((phase % k) + k) % k;
+    if (b > 0) b -= k; // leading partial cell
+    const out = [];
+    for (; b < len; b += k) {
+      const lo = Math.max(0, Math.round(b));
+      const hi = Math.min(len, Math.round(b + k));
+      // keep even thin edge cells — aliasing fringes are semi-transparent
+      // and vote themselves away; empty output borders are cropped later
+      if (hi - lo >= Math.max(1, k * 0.2)) out.push([lo, hi]);
+    }
+    return out;
+  };
+
   const fitGrid = (peaks, len) => {
     if (peaks.length < 3) return null;
     const kMax = Math.min(64, len / 2);
@@ -190,44 +212,34 @@ export function optimizeSpriteGroup(list) {
     const { phase } = ring(peaks, refined.k);
     return { k: refined.k, phase, R: refined.R };
   };
+
   const px = peaksOf(Ex, tw);
   const py = peaksOf(Ey, th);
-  let gx = fitGrid(px, tw);
-  let gy = fitGrid(py, th);
-  // axes of one sprite share the pixel size: harmonize near-equal results,
-  // and borrow the found axis when the other lacks evidence
-  if (gx && gy && Math.abs(gx.k - gy.k) < 0.12 * Math.max(gx.k, gy.k)) {
-    const k = (gx.k + gy.k) / 2;
-    gx = { k, phase: ring(px, k).phase };
-    gy = { k, phase: ring(py, k).phase };
-  } else if (gx && !gy) {
-    gy = { k: gx.k, phase: py.length ? ring(py, gx.k).phase : 0 };
-  } else if (gy && !gx) {
-    gx = { k: gy.k, phase: px.length ? ring(px, gy.k).phase : 0 };
+  let gx = null, gy = null;
+  const forced = options.forceK > 1 ? options.forceK : 0;
+  if (forced) {
+    // manual override: trust the user's pixel size, fit only the phase
+    gx = { k: forced, phase: px.length ? ring(px, forced).phase : 0 };
+    gy = { k: forced, phase: py.length ? ring(py, forced).phase : 0 };
+  } else {
+    gx = fitGrid(px, tw);
+    gy = fitGrid(py, th);
+    // axes of one sprite share the pixel size: harmonize near-equal
+    // results, and borrow the found axis when the other lacks evidence
+    if (gx && gy && Math.abs(gx.k - gy.k) < 0.12 * Math.max(gx.k, gy.k)) {
+      const k = (gx.k + gy.k) / 2;
+      gx = { k, phase: ring(px, k).phase };
+      gy = { k, phase: ring(py, k).phase };
+    } else if (gx && !gy) {
+      gy = { k: gx.k, phase: py.length ? ring(py, gx.k).phase : 0 };
+    } else if (gy && !gx) {
+      gx = { k: gy.k, phase: px.length ? ring(px, gy.k).phase : 0 };
+    }
   }
   const kx = gx?.k ?? 1, ky = gy?.k ?? 1;
   const isNoop = kx === 1 && ky === 1
     && x0 === 0 && y0 === 0 && tw === w && th === h;
   if (isNoop) return null;
-
-  // ---- 4) grid cells (real-valued boundaries → integer sample spans) ----
-  const cellsOf = (g, len) => {
-    if (!g || g.k === 1) {
-      return Array.from({ length: len }, (_, i) => [i, i + 1]);
-    }
-    const { k, phase } = g;
-    let b = ((phase % k) + k) % k;
-    if (b > 0) b -= k; // leading partial cell
-    const out = [];
-    for (; b < len; b += k) {
-      const lo = Math.max(0, Math.round(b));
-      const hi = Math.min(len, Math.round(b + k));
-      // keep even thin edge cells — aliasing fringes are semi-transparent
-      // and vote themselves away; empty output borders are cropped later
-      if (hi - lo >= Math.max(1, k * 0.2)) out.push([lo, hi]);
-    }
-    return out;
-  };
   const cx = cellsOf(gx, tw);
   const cy = cellsOf(gy, th);
   const w2 = cx.length, h2 = cy.length;
@@ -335,8 +347,8 @@ export function optimizeSpriteGroup(list) {
 }
 
 // single-image convenience wrapper (kept for API compatibility)
-export function optimizeSpritePixels(pixels) {
-  const r = optimizeSpriteGroup([pixels]);
+export function optimizeSpritePixels(pixels, options = {}) {
+  const r = optimizeSpriteGroup([pixels], options);
   return r && { pixels: r.frames[0], k: r.k, kLabel: r.kLabel, trim: r.trim, mapPoint: r.mapPoint };
 }
 
@@ -371,8 +383,14 @@ export function setupSpriteStudio(host, opts = {}) {
     </div>
     <button id="ss-pivot-all" class="secondary" hidden data-i18n="ss.pivotall"
       data-i18n-title="tip.ss.pivotall"></button>
+    <div class="row" id="ss-optpx-row" hidden data-i18n-title="tip.ss.optpx">
+      <span data-i18n="ss.optpx"></span>
+      <input id="ss-optpx" type="number" value="0" min="0" step="0.5">
+    </div>
     <button id="ss-optimize" class="secondary" hidden data-i18n="ss.optimize"
       data-i18n-title="tip.ss.optimize"></button>
+    <button id="ss-optreset" class="secondary" hidden data-i18n="ss.optreset"
+      data-i18n-title="tip.ss.optreset"></button>
     <div class="hint2" id="ss-optinfo"></div>
     <div class="ss-divider"></div>
     <label class="row"><span data-i18n="ss.name"></span>
@@ -584,6 +602,8 @@ export function setupSpriteStudio(host, opts = {}) {
     $('ss-pivot-row').hidden = !asset;
     $('ss-pivot-all').hidden = !asset || state.assets.length < 2;
     $('ss-optimize').hidden = !state.assets.length;
+    $('ss-optpx-row').hidden = !state.assets.length;
+    $('ss-optreset').hidden = !state.assets.some((a) => a.original);
     if (asset) {
       $('ss-pivot-x').value = asset.pivot.x;
       $('ss-pivot-y').value = asset.pivot.y;
@@ -736,6 +756,9 @@ export function setupSpriteStudio(host, opts = {}) {
     state.settings.name = 'Sprite';
     $('ss-name').value = 'Sprite';
     $('ss-optinfo').textContent = '';
+    $('ss-optpx').value = '0';
+    $('ss-pivot-x').value = '';
+    $('ss-pivot-y').value = '';
     player.frame = 0;
     player.playing = false;
     addAnimation(T('ss.defaultanim', 'Idle'));
@@ -797,12 +820,21 @@ export function setupSpriteStudio(host, opts = {}) {
     }
     const lines = [];
     let n = 0;
+    // manual pixel-size override (0 = automatic detection)
+    const forceK = parseFloat($('ss-optpx').value) || 0;
     for (const group of groups.values()) {
-      const res = optimizeSpriteGroup(group.map((a) => a.pixels));
+      const res = optimizeSpriteGroup(group.map((a) => a.pixels), { forceK });
       if (!res) continue;
       group.forEach((asset, i) => {
         const { width: ow, height: oh } = asset.pixels;
         const out = res.frames[i];
+        // remember the ORIGINAL import (first optimization only) so Reset
+        // Optimization can restore it
+        asset.original ??= {
+          pixels: asset.pixels,
+          pivot: { ...asset.pivot },
+          pivotTouched: !!asset.pivotTouched,
+        };
         // custom pivots follow the image through trim + grid mapping;
         // untouched pivots re-default to the new bottom-center
         asset.pivot = asset.pivotTouched
@@ -821,6 +853,22 @@ export function setupSpriteStudio(host, opts = {}) {
       ? `${T('ss.optdone', 'Optimized {n} images').split('{n}').join(String(n))} — ${lines.join(' · ')}`
       : T('ss.optnone', 'Nothing to optimize');
     lastPreviewKey = ''; // pixels changed under the same asset id
+    renderAll();
+  });
+
+  // restore every image to its original, unoptimized state
+  $('ss-optreset').addEventListener('click', () => {
+    for (const asset of state.assets) {
+      if (!asset.original) continue;
+      asset.pixels = asset.original.pixels;
+      asset.pivot = { ...asset.original.pivot };
+      asset.pivotTouched = asset.original.pivotTouched;
+      delete asset.original;
+      results.delete(asset.id); // stale conversion
+    }
+    $('ss-optpx').value = '0';
+    $('ss-optinfo').textContent = '';
+    lastPreviewKey = '';
     renderAll();
   });
 
@@ -909,6 +957,7 @@ export function setupSpriteStudio(host, opts = {}) {
   // ---------- generate & export ----------
   let worker = null; // created on first use
   let jobSeq = 0;
+  let cancelPending = null; // rejects the in-flight conversion (Cancel)
   const convertAsset = (asset) => new Promise((resolve, reject) => {
     worker ??= opts.createWorker?.()
       ?? new Worker(new URL('./convert-worker.js', import.meta.url), { type: 'module' });
@@ -916,8 +965,18 @@ export function setupSpriteStudio(host, opts = {}) {
     const onMsg = (ev) => {
       if (ev.data.jobId !== jobId) return;
       worker.removeEventListener('message', onMsg);
+      cancelPending = null;
       if (!ev.data.ok) reject(new Error(ev.data.error ?? 'conversion failed'));
       else resolve(ev.data); // { decorations, stats, positions, colors, owners }
+    };
+    // hard cancel: terminate the worker (the pipeline inside is synchronous)
+    // and reject; the next conversion lazily spawns a fresh worker
+    cancelPending = () => {
+      try { worker?.terminate?.(); } catch { /* stub workers in tests */ }
+      worker = null;
+      const err = new Error('cancelled');
+      err.cancelled = true;
+      reject(err);
     };
     worker.addEventListener('message', onMsg);
     worker.postMessage({
@@ -1033,7 +1092,10 @@ export function setupSpriteStudio(host, opts = {}) {
       opts.onGenerated?.(list);
       return lastExport;
     } catch (err) {
-      $('ss-error').textContent = `${T('ss.fail', 'Generation failed:')} ${err.message}`;
+      // user cancellation is not an error — leave the inline message empty
+      if (!err?.cancelled) {
+        $('ss-error').textContent = `${T('ss.fail', 'Generation failed:')} ${err.message}`;
+      }
       throw err;
     }
   };
@@ -1046,6 +1108,12 @@ export function setupSpriteStudio(host, opts = {}) {
     importFiles,
     refresh: renderAll,
     generate,
+    // hard-stop the in-flight conversion (Cancel button)
+    cancel: () => {
+      const c = cancelPending;
+      cancelPending = null;
+      c?.();
+    },
     // rebuilt on demand so collision/auto-assemble reflect the checkboxes
     // at DOWNLOAD time, exactly like the model workflow
     getExport: () => buildExport(),

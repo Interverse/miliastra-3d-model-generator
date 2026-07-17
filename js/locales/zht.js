@@ -512,4 +512,9 @@ export default {
   "tip.ss.optimize": "裁掉透明邊緣，偵測精靈的真實像素尺寸並縮小——每個像素區塊內取多數顏色",
   "ss.optdone": "已最佳化 {n} 張圖片",
   "ss.optnone": "沒有可最佳化的內容",
+  "ss.optpx": "手動指定像素尺寸 (px)",
+  "tip.ss.optpx": "最佳化圖片時每個精靈像素對應的來源像素數——0 為自動偵測；偵測結果不確定時可手動指定",
+  "ss.optreset": "↺ 重設最佳化",
+  "tip.ss.optreset": "將所有圖片恢復到匯入時的原始狀態，復原圖片最佳化",
+  "t.cancelled": "已取消轉換",
 };

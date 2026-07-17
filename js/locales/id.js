@@ -512,4 +512,9 @@ export default {
   "tip.ss.optimize": "Memangkas tepi transparan, mendeteksi ukuran piksel sebenarnya dari sprite, lalu memperkecil — warna mayoritas menang di tiap blok piksel",
   "ss.optdone": "{n} gambar dioptimalkan",
   "ss.optnone": "Tidak ada yang perlu dioptimalkan",
+  "ss.optpx": "Paksa ukuran piksel (px)",
+  "tip.ss.optpx": "Piksel sumber per piksel sprite saat optimasi — 0 mendeteksi otomatis; atur manual bila deteksi ambigu",
+  "ss.optreset": "↺ Reset optimasi",
+  "tip.ss.optreset": "Mengembalikan semua gambar ke keadaan impor aslinya, membatalkan optimasi gambar",
+  "t.cancelled": "Konversi dibatalkan",
 };

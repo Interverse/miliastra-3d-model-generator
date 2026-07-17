@@ -512,4 +512,9 @@ export default {
   "tip.ss.optimize": "Cắt viền trong suốt, phát hiện kích thước pixel thật của sprite rồi thu nhỏ — màu chiếm đa số thắng trong mỗi khối pixel",
   "ss.optdone": "Đã tối ưu {n} hình ảnh",
   "ss.optnone": "Không có gì để tối ưu",
+  "ss.optpx": "Ghi đè kích thước pixel (px)",
+  "tip.ss.optpx": "Số pixel nguồn cho mỗi pixel sprite khi tối ưu — 0 là tự động phát hiện; đặt thủ công khi phát hiện không rõ ràng",
+  "ss.optreset": "↺ Đặt lại tối ưu",
+  "tip.ss.optreset": "Khôi phục tất cả hình ảnh về trạng thái gốc khi nhập, hoàn tác tối ưu hóa",
+  "t.cancelled": "Đã hủy chuyển đổi",
 };
