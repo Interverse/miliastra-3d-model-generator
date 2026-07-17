@@ -517,4 +517,5 @@ export default {
   "ss.optreset": "↺ 重置优化",
   "tip.ss.optreset": "将所有图片恢复到导入时的原始状态，撤销图片优化",
   "t.cancelled": "已取消转换",
+  "ss.drop": "将图片、GIF 或精灵表拖放到此处",
 };

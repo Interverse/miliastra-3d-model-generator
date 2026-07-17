@@ -517,4 +517,5 @@ export default {
   "ss.optreset": "↺ Đặt lại tối ưu",
   "tip.ss.optreset": "Khôi phục tất cả hình ảnh về trạng thái gốc khi nhập, hoàn tác tối ưu hóa",
   "t.cancelled": "Đã hủy chuyển đổi",
+  "ss.drop": "Thả hình ảnh, GIF hoặc sprite sheet vào đây",
 };

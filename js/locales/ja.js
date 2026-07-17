@@ -517,4 +517,5 @@ export default {
   "ss.optreset": "↺ 最適化をリセット",
   "tip.ss.optreset": "すべての画像を読み込み時の元の状態に戻し、最適化を取り消します",
   "t.cancelled": "変換をキャンセルしました",
+  "ss.drop": "画像・GIF・スプライトシートをここにドロップ",
 };

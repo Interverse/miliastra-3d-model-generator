@@ -371,7 +371,10 @@ export function setupSpriteStudio(host, opts = {}) {
   host.innerHTML = `
   <details class="panel" open>
     <summary data-i18n="ss.import"></summary>
-    <button id="ss-add-images" class="secondary" data-i18n="ss.addimg"></button>
+    <label class="filedrop" id="ss-filedrop">
+      <input type="file" id="ss-file-input" multiple accept="image/*">
+      <span><span data-i18n="ss.drop"></span><br><span data-i18n="drop.line2"></span></span>
+    </label>
     <button id="ss-add-sheet" class="secondary" data-i18n="ss.addsheet"></button>
     <div class="hint2" data-i18n="ss.importhint"></div>
     <div class="ss-frames" id="ss-frames"></div>
@@ -706,14 +709,35 @@ export function setupSpriteStudio(host, opts = {}) {
     renderAll();
   };
 
-  $('ss-add-images').addEventListener('click', () => {
-    const inp = document.createElement('input');
-    inp.type = 'file';
-    inp.multiple = true;
-    inp.accept = 'image/*';
-    inp.addEventListener('change', () => importFiles([...inp.files]));
-    inp.click();
+  // drop-zone file input (click to browse) — uses the same router as
+  // drag-and-drop, so a single n:1 strip offers the sheet slicer too
+  $('ss-file-input').addEventListener('change', () => {
+    importDropped([...$('ss-file-input').files]);
+    $('ss-file-input').value = '';
   });
+  // shared sprite-sheet slicing flow (button AND drag-and-drop use it)
+  const importSheetBitmap = async (bmp, baseName, initial) => {
+    const res = await openSheetEditor(bmp, initial, {
+      // a sheet can hold several animations: save the current slices as a
+      // NEW animation without closing the editor, then keep slicing
+      onSaveAnimation: async (rects) => {
+        const nm = await textPrompt({ title: T('ss.addanim', 'Add animation'),
+          label: T('ss.animname', 'Animation name'),
+          value: `Anim${state.animations.length + 1}` });
+        if (!nm) return false;
+        addAnimation(nm);
+        rects.forEach((r, i) => addAsset(`${nm}_${i + 1}`, bitmapToPixels(bmp, r)));
+        renderAll();
+        return true;
+      },
+    });
+    if (!res) return false;
+    if (!anim()) addAnimation(T('ss.defaultanim', 'Idle'));
+    res.frames.forEach((r, i) => addAsset(`${baseName}_${i + 1}`, bitmapToPixels(bmp, r)));
+    renderAll();
+    return true;
+  };
+
   $('ss-add-sheet').addEventListener('click', () => {
     const inp = document.createElement('input');
     inp.type = 'file';
@@ -722,28 +746,40 @@ export function setupSpriteStudio(host, opts = {}) {
       const file = inp.files[0];
       if (!file) return;
       const bmp = await fileToBitmap(file);
-      const res = await openSheetEditor(bmp, undefined, {
-        // a sheet can hold several animations: save the current slices as a
-        // NEW animation without closing the editor, then keep slicing
-        onSaveAnimation: async (rects) => {
-          const nm = await textPrompt({ title: T('ss.addanim', 'Add animation'),
-            label: T('ss.animname', 'Animation name'),
-            value: `Anim${state.animations.length + 1}` });
-          if (!nm) return false;
-          addAnimation(nm);
-          rects.forEach((r, i) => addAsset(`${nm}_${i + 1}`, bitmapToPixels(bmp, r)));
-          renderAll();
-          return true;
-        },
-      });
-      if (!res) return;
-      if (!anim()) addAnimation(T('ss.defaultanim', 'Idle'));
-      const base = file.name.replace(/\.[^.]+$/, '') || 'sheet';
-      res.frames.forEach((r, i) => addAsset(`${base}_${i + 1}`, bitmapToPixels(bmp, r)));
-      renderAll();
+      await importSheetBitmap(bmp, file.name.replace(/\.[^.]+$/, '') || 'sheet');
     });
     inp.click();
   });
+
+  // Drag-and-drop entry point (routed here by the app while Sprite mode is
+  // active). Multiple images and GIFs go straight through the normal import
+  // pipeline; a SINGLE static image whose aspect is a clean n:1 strip is
+  // offered to the sprite-sheet slicer first (cancelling falls back to a
+  // plain image import).
+  const importDropped = async (files) => {
+    const images = files.filter((f) => f.type.startsWith('image/'));
+    if (!images.length) return;
+    const single = images.length === 1
+      && !/gif$/i.test(images[0].type) && !/\.gif$/i.test(images[0].name);
+    if (single) {
+      const bmp = await fileToBitmap(images[0]);
+      const { width: w, height: h } = bmp;
+      const ratio = Math.max(w / h, h / w);
+      const n = Math.round(ratio);
+      if (n >= 2 && Math.abs(ratio - n) < 0.05) {
+        const cell = Math.min(w, h);
+        const done = await importSheetBitmap(bmp,
+          images[0].name.replace(/\.[^.]+$/, '') || 'sheet', {
+            params: { cellW: cell, cellH: cell, padX: 0, padY: 0,
+              startX: 0, startY: 0,
+              cols: w >= h ? n : 1, rows: w >= h ? 1 : n, count: n },
+          });
+        if (done) return;
+        // slicing cancelled → import as a plain image below
+      }
+    }
+    await importFiles(images);
+  };
   // clear everything: images, animations, cached results — fresh start
   $('ss-clear').addEventListener('click', () => {
     state.assets = [];
@@ -1106,6 +1142,7 @@ export function setupSpriteStudio(host, opts = {}) {
   return {
     state,
     importFiles,
+    importDropped,
     refresh: renderAll,
     generate,
     // hard-stop the in-flight conversion (Cancel button)

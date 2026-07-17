@@ -185,9 +185,19 @@ export function initApp({ mode = "gia" } = {}) {
   fileInput.addEventListener("change", () => loadFiles([...fileInput.files]));
   for (const evt of ["dragover", "dragleave", "drop"]) {
     document.body.addEventListener(evt, (e) => {
+      // only react to EXTERNAL file drags — internal drag-and-drop (frame
+      // reordering etc.) must not trigger the drop UI
+      if (![...(e.dataTransfer?.types ?? [])].includes("Files")) return;
       e.preventDefault();
-      filedrop.classList.toggle("dragover", evt === "dragover");
-      if (evt === "drop") loadFiles([...e.dataTransfer.files]);
+      if (spriteMode) {
+        // Sprite workflow: highlight its drop box (same pattern as the
+        // model workflow) and route through the studio's importer
+        $("ss-filedrop")?.classList.toggle("dragover", evt === "dragover");
+        if (evt === "drop") spriteStudio?.importDropped([...e.dataTransfer.files]);
+      } else {
+        filedrop.classList.toggle("dragover", evt === "dragover");
+        if (evt === "drop") loadFiles([...e.dataTransfer.files]);
+      }
     });
   }
 

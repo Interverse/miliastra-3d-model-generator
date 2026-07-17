@@ -517,4 +517,5 @@ export default {
   "ss.optreset": "↺ İyileştirmeyi sıfırla",
   "tip.ss.optreset": "Tüm görselleri içe aktarıldıkları özgün duruma döndürür ve iyileştirmeyi geri alır",
   "t.cancelled": "Dönüştürme iptal edildi",
+  "ss.drop": "Görselleri, GIF'leri veya sprite sayfalarını buraya bırakın",
 };

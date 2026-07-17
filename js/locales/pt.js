@@ -517,4 +517,5 @@ export default {
   "ss.optreset": "↺ Redefinir otimização",
   "tip.ss.optreset": "Restaura todas as imagens ao estado original importado, desfazendo a otimização",
   "t.cancelled": "Conversão cancelada",
+  "ss.drop": "Solte aqui imagens, GIFs ou sprite sheets",
 };

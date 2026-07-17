@@ -1145,16 +1145,6 @@ button.small {
 #sprite-studio[hidden] {
   display: none;
 }
-/* the leading import action: emphasized secondary (bright text, bold) —
-   visually BELOW the workflow tabs, which keep the accent tint + border */
-#ss-add-images {
-  background: #2a2e36;
-  color: #e6e9ee;
-  font-weight: 600;
-}
-#ss-add-images:hover:not(:disabled) {
-  background: #3a4150;
-}
 /* subtle divider between control groups inside a panel */
 .ss-divider {
   border-top: 1px solid #2a2e36;

@@ -517,4 +517,5 @@ export default {
   "ss.optreset": "↺ 重設最佳化",
   "tip.ss.optreset": "將所有圖片恢復到匯入時的原始狀態，復原圖片最佳化",
   "t.cancelled": "已取消轉換",
+  "ss.drop": "將圖片、GIF 或精靈表拖放到此處",
 };

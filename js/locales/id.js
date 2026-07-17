@@ -517,4 +517,5 @@ export default {
   "ss.optreset": "↺ Reset optimasi",
   "tip.ss.optreset": "Mengembalikan semua gambar ke keadaan impor aslinya, membatalkan optimasi gambar",
   "t.cancelled": "Konversi dibatalkan",
+  "ss.drop": "Letakkan gambar, GIF, atau sprite sheet di sini",
 };
